@@ -114,6 +114,32 @@ def main() -> None:
     validate_corpus_and_labels(params)
 
 
+        # 1) Existence des templates spaCy référencés
+    models = cfg_all["models_cfg"]["families"].get("spacy", {})
+    missing = []
+    for mid, mc in models.items():
+        tpl = mc.get("config_template")
+        if tpl and not Path(tpl).exists():
+            missing.append((mid, tpl))
+    if missing:
+        for mid, tpl in missing:
+            print(f"[pre_check] MISSING spaCy config_template for model '{mid}': {tpl}")
+        raise SystemExit("[pre_check] Missing spaCy config templates.")
+
+    # 2) Cohérence FAMILIES demandées vs models.yml
+    families_req = set(params.get("families", []))
+    known_fams = set(cfg_all["models_cfg"]["families"].keys())
+    unknown = families_req - known_fams
+    if unknown:
+        raise SystemExit(f"[pre_check] Unknown families requested: {sorted(unknown)}")
+
+    # 3) Hardware preset connu
+    hp = params.get("hardware_preset", "small")
+    if hp not in cfg_all["hardware_cfg"].get("presets", {}):
+        raise SystemExit(f"[pre_check] Unknown hardware_preset: {hp}")
+
+
+
     # Vérification hardware minimale
     hw = params.get("hardware", {})
     if not hw:

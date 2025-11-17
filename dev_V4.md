@@ -75,68 +75,54 @@ Par rapport à V3 :
 
 ### 2.1 Arborescence
 
-Arbo actuelle :
+## Arborescence cible du pipeline V4
 
-```text
-.
-├── configs
-│   ├── common
-│   │   ├── balance.yml
-│   │   ├── corpora.yml
-│   │   ├── hardware.yml
-│   │   └── models.yml
-│   ├── label_maps
-│   │   └── ideology_global.yml
-│   └── profiles
-│       ├── check_only.yml
-│       ├── crawl_full.yml
-│       ├── crawl_quick.yml
-│       ├── custom.yml
-│       ├── ideo_full.yml
-│       └── ideo_quick.yml
-└── scripts
-    ├── core
-    │   ├── core_evaluate.py
-    │   ├── core_prepare.py
-    │   ├── core_train.py
-    │   ├── core_utils.py
-    │   └── __init__.py
-    ├── experiments
-    │   └── __init__.py
-    ├── __init__.py
-    ├── post
-    │   └── __init__.py
-    └── pre
-        ├── __init__.py
-        ├── make_ideology_skeleton.py
-        └── pre_check_config.py
-```
+L’architecture V4 repose sur une séparation nette entre :
 
-Arbo attendue (données & résultats) :
+- la **configuration** (`configs/`),
+- les **données** (`data/`),
+- les **modèles entraînés** (`models/`),
+- les **rapports / métriques** (`reports/`),
+- les **scripts** (`scripts/`).
+
+Arborescence cible :
 
 ```text
 data/
-  raw/{corpus_id}/corpus.xml       # TEI complet
-  interim/{corpus_id}/{view}/
-    train.tsv
-    job.tsv
-    meta_view.json
-  processed/{corpus_id}/{view}/
-    spacy/
-      train.spacy
-      job.spacy
-      meta_spacy_formats.json
-    meta_formats.json
+  raw/
+    {corpus_id}/
+      corpus.xml
 
-models/{corpus_id}/{view}/{family}/{model_id}/
-  ... fichiers modèles ...
-  meta_model.json
+  interim/
+    {corpus_id}/{view}/
+      train.tsv
+      job.tsv
+      meta_view.json
 
-reports/{corpus_id}/{view}/{family}/{model_id}/
-  metrics.json
-  classification_report.txt
-  meta_eval.json
-```
+  processed/
+    {corpus_id}/{view}/
+      meta_formats.json
+      spacy/
+        train.spacy
+        job.spacy
+        train_000.spacy ...
+      sklearn/
+      hf/
+
+models/
+  {corpus_id}/{view}/{family}/{model_id}/
+    meta_model.json
+    ... fichiers propres à la famille (joblib, spaCy, HF)
+
+reports/
+  {corpus_id}/{view}/{family}/{model_id}/
+    metrics.json
+    classification_report.txt
+    meta_eval.json
+
+logs/
+  run-YYYYMMDD-HHMMSS.log (optionnel)
+
 
 ---
 

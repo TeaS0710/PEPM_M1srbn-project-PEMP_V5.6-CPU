@@ -30,6 +30,20 @@ families:
       batch_stop: 128
       config_template: "configs/spacy/textcat_cnn_base.cfg"
 
+    spacy_bow_quick:
+      desc: "spaCy TextCat BOW (rapide)"
+      arch: "bow"
+      config_template: "configs/spacy/textcat_bow_base.cfg"
+      epochs: 5
+      dropout: 0.1
+
+    spacy_cnn_quick:
+      desc: "spaCy TextCat CNN/Ensemble"
+      arch: "cnn"
+      config_template: "configs/spacy/textcat_cnn_base.cfg"
+      epochs: 5
+      dropout: 0.1
+
     # Optionnel : un modèle plus léger / debug
     spacy_cnn_debug:
       desc: "TextCat spaCy CNN très léger (debug/smoke test)"
@@ -160,17 +174,18 @@ families:
   hf:
 
     camembert_base:
-      desc: "CamemBERT-base classification (FR, CPU)"
+      desc: "CamemBERT base"
       model_name: "camembert-base"
       tokenizer_class: "transformers.AutoTokenizer"
       model_class: "transformers.AutoModelForSequenceClassification"
+      use_class_weights: false
       trainer_params:
         learning_rate: 2e-5
         per_device_train_batch_size: 8
         per_device_eval_batch_size: 8
         num_train_epochs: 3
         weight_decay: 0.01
-        warmup_ratio: 0.1
+        warmup_ratio: 0.0
         gradient_accumulation_steps: 1
 
     flaubert_base_cased:

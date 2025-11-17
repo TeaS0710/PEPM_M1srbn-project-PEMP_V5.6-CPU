@@ -153,7 +153,8 @@ def maybe_debug_subsample(
     params: Dict[str, Any],
 ) -> Tuple[List[str], List[str]]:
     """
-    Si debug_mode=True, limiter la taille du dataset (ex: 1000 docs max).
+    Si debug_mode=True, limiter la taille du dataset (ex: 1000 docs max),
+    en utilisant le seed du profil pour une reproductibilité globale.
     """
     if not params.get("debug_mode"):
         return texts, labels
@@ -162,13 +163,15 @@ def maybe_debug_subsample(
     if len(texts) <= max_docs:
         return texts, labels
 
-    print(f"[core_train] debug_mode actif : sous-échantillon de {max_docs} docs sur {len(texts)}")
+    seed = int(params.get("seed", 42))
+    print(f"[core_train] debug_mode actif : sous-échantillon de {max_docs} docs sur {len(texts)} (seed={seed})")
     indices = list(range(len(texts)))
-    random.Random(42).shuffle(indices)
+    random.Random(seed).shuffle(indices)
     idx_sel = sorted(indices[:max_docs])
     texts_sub = [texts[i] for i in idx_sel]
     labels_sub = [labels[i] for i in idx_sel]
     return texts_sub, labels_sub
+
 
 
 def save_meta_model(
@@ -199,114 +202,134 @@ def save_meta_model(
 # ----------------- Entraînement spaCy -----------------
 
 def train_spacy_model(params: Dict[str, Any], model_id: str) -> None:
+    """
+    Entraînement spaCy générique (config-first) pour la famille 'spacy'.
+    - Charge un template .cfg depuis models.yml (config_template)
+    - Override paths.train/dev avec les DocBin construits par core_prepare (peut être shardé)
+    - Override hyperparams (epochs, dropout) depuis models.yml
+    - Merge les shards en un seul DocBin temporaire si besoin
+    """
+    import json, tempfile
+    from pathlib import Path
+
     try:
         import spacy
-        from spacy.util import minibatch
         from spacy.tokens import DocBin
+        from spacy.util import load_config
+        from spacy.cli.train import train as spacy_train
     except ImportError:
-        raise SystemExit("[core_train] spaCy n'est pas installé, impossible de lancer la famille 'spacy'.")
+        print("[core_train:spacy] spaCy non installé. Skip spaCy.")
+        return
 
-    models_cfg = params["models_cfg"]["families"]["spacy"][model_id]
-    lang = models_cfg.get("lang", "fr")
-    epochs = int(models_cfg.get("epochs", 5))
-    dropout = float(models_cfg.get("dropout", 0.2))
-    arch = models_cfg.get("arch", None)  # "bow" ou "cnn" (info logguée pour l'instant)
-    config_template = models_cfg.get("config_template")  # pour une future V4+ avec configs spaCy
+    spacy_models = params["models_cfg"]["families"]["spacy"]
+    model_cfg = spacy_models[model_id]
 
-    corpus_id = params.get("corpus_id", params.get("corpus", {}).get("corpus_id", "unknown_corpus"))
-    view = params.get("view", "unknown_view")
+    config_template = model_cfg.get("config_template")
+    if not config_template:
+        print(f"[core_train:spacy] Pas de 'config_template' pour {model_id}. Skip.")
+        return
 
-    # Répertoire où core_prepare a mis les DocBin éventuels
-    spacy_proc_dir = Path("data") / "processed" / corpus_id / view / "spacy"
+    # Localiser les DocBin train/dev (via formats meta ou répertoire connu)
+    corpus_id = params.get("corpus_id") or params["corpus"]["id"]
+    view = params.get("view") or params.get("profile_raw", {}).get("view")
+    processed_dir = Path("data/processed") / str(corpus_id) / str(view)
+    spacy_dir = processed_dir / "spacy"
 
-    nlp = spacy.blank(lang)
+    # formats_meta.json si présent
+    meta_formats_path = processed_dir / "meta_formats.json"
+    train_paths = []
+    dev_paths = []
 
-    train_data: List[Tuple[str, Dict[str, float]]] = []
-    labels_set: List[str] = []
+    def resolve_paths_from_meta() -> bool:
+        if not meta_formats_path.exists():
+            return False
+        try:
+            fm = json.loads(meta_formats_path.read_text(encoding="utf-8"))
+            spacy_meta = fm.get("families", {}).get("spacy", {})
+            tr = spacy_meta.get("train_spacy")
+            dv = spacy_meta.get("job_spacy")
+            if isinstance(tr, list):
+                train_paths.extend([str(spacy_dir / p) for p in tr])
+            elif isinstance(tr, str):
+                train_paths.append(str(spacy_dir / tr))
+            if isinstance(dv, list):
+                dev_paths.extend([str(spacy_dir / p) for p in dv])
+            elif isinstance(dv, str):
+                dev_paths.append(str(spacy_dir / dv))
+            return bool(train_paths and dev_paths)
+        except Exception as e:
+            print(f"[core_train:spacy] Erreur lecture meta_formats.json: {e}")
+            return False
 
-    # Chercher tous les DocBin "train*.spacy" (shardés ou non)
-    train_docbins = sorted(spacy_proc_dir.glob("train*.spacy"))
+    ok = resolve_paths_from_meta()
+    if not ok:
+        # Fallback simple
+        if (spacy_dir / "train.spacy").exists():
+            train_paths.append(str(spacy_dir / "train.spacy"))
+        if (spacy_dir / "job.spacy").exists():
+            dev_paths.append(str(spacy_dir / "job.spacy"))
 
-    if train_docbins:
-        print(f"[core_train:spacy] Utilisation de {len(train_docbins)} DocBin train*.spacy dans {spacy_proc_dir}")
-        docs = []
-        for path in train_docbins:
-            db = DocBin().from_disk(path)
-            docs.extend(list(db.get_docs(nlp.vocab)))
+    if not (train_paths and dev_paths):
+        raise SystemExit("[core_train:spacy] DocBin train/dev introuvables.")
 
-        # Sous-échantillon si debug_mode (comme pour le TSV)
-        if params.get("debug_mode") and len(docs) > 1000:
-            print(f"[core_train:spacy] debug_mode actif : sous-échantillon de 1000 docs sur {len(docs)}")
-            docs = docs[:1000]
+    # Si sharding: fusionner en un seul DocBin pour spaCy train
+    def merge_docbins(paths: List[str], out_path: Path) -> None:
+        db_out = DocBin()
+        for p in paths:
+            db_in = DocBin().from_disk(p)
+            for doc in db_in.get_docs(spacy.blank("xx").vocab):  # vocab neutre pour merge
+                db_out.add(doc)
+        db_out.to_disk(out_path)
 
-        labels_set = sorted(
-            {lab for doc in docs for lab, val in doc.cats.items() if val}
-        )
-        for doc in docs:
-            # doc.cats est déjà un dict {label: score/bool}
-            train_data.append((doc.text, dict(doc.cats)))
-        train_source = "docbin"
-    else:
-        # ---- Fallback TSV (compatible ancien flux V2) ----
-        print(f"[core_train:spacy] Aucun DocBin train*.spacy trouvé, fallback sur train.tsv")
-        train_texts, train_labels, _job_texts = load_tsv_dataset(params)
-        train_texts, train_labels = maybe_debug_subsample(train_texts, train_labels, params)
+    with tempfile.TemporaryDirectory() as td:
+        tmp_dir = Path(td)
+        train_merged = tmp_dir / "train_merged.spacy"
+        dev_merged = tmp_dir / "dev_merged.spacy"
+        if len(train_paths) > 1:
+            merge_docbins(train_paths, train_merged)
+            train_bin = str(train_merged)
+        else:
+            train_bin = train_paths[0]
+        if len(dev_paths) > 1:
+            merge_docbins(dev_paths, dev_merged)
+            dev_bin = str(dev_merged)
+        else:
+            dev_bin = dev_paths[0]
 
-        labels_set = sorted(set(train_labels))
-        for text, label in zip(train_texts, train_labels):
-            cats = {lab: (lab == label) for lab in labels_set}
-            train_data.append((text, cats))
-        train_source = "tsv"
+        # Charger le template et override les chemins + hyperparams
+        cfg = load_config(config_template)
+        cfg["paths"]["train"] = train_bin
+        cfg["paths"]["dev"] = dev_bin
 
-    print(f"[core_train:spacy] Modèle={model_id}, labels={labels_set}, n_train_docs={len(train_data)}")
+        # Overrides hydratés depuis models.yml
+        if "training" not in cfg:
+            cfg["training"] = {}
+        epochs = model_cfg.get("epochs")
+        if epochs is not None:
+            cfg["training"]["max_epochs"] = int(epochs)
+        dropout = model_cfg.get("dropout")
+        if dropout is not None:
+            cfg["training"]["dropout"] = float(dropout)
 
-    # Construction du pipe textcat (simple, multi-classes exclusif pour l'instant)
-    if "textcat" not in nlp.pipe_names:
-        textcat = nlp.add_pipe("textcat")
-    else:
-        textcat = nlp.get_pipe("textcat")
+        # Répertoire de sortie
+        model_dir = get_model_output_dir(params, "spacy", model_id)
+        ensure_dir(model_dir)
 
-    # On part sur un textcat multi-classes exclusif
-    for label in labels_set:
-        textcat.add_label(label)  # type: ignore[call-arg]
+        # Entraînement via API spaCy (équivalent CLI)
+        print(f"[core_train:spacy] Train {model_id} | epochs={cfg['training'].get('max_epochs')} | template={config_template}")
+        spacy_train(cfg, output_path=model_dir, overrides={})
 
-    # Initialisation & entraînement
-    optimizer = nlp.begin_training()
-    print(f"[core_train:spacy] Entraînement pour {epochs} epochs.")
-    for epoch in range(epochs):
-        random.shuffle(train_data)
-        losses: Dict[str, float] = {}
-        batches = minibatch(train_data, size=8)
-        for batch in batches:
-            texts = [t for t, _ in batch]
-            annotations = [{"cats": cats} for _, cats in batch]
-            nlp.update(texts, annotations, sgd=optimizer, drop=dropout, losses=losses)
-        print(f"[core_train:spacy] Epoch {epoch+1}/{epochs} - pertes={losses}")
-
-    model_dir = get_model_output_dir(params, "spacy", model_id)
-    ensure_dir(model_dir)
-    nlp.to_disk(model_dir)
-    print(f"[core_train:spacy] Modèle spaCy sauvegardé dans {model_dir}")
-
-    save_meta_model(
-        params,
-        "spacy",
-        model_id,
-        model_dir,
-        extra={
-            "epochs": epochs,
-            "dropout": dropout,
-            "arch": arch,
+        # Meta modèle
+        extra = {
+            "arch": model_cfg.get("arch"),
             "config_template": config_template,
-            "labels": labels_set,
-            "n_train_docs": len(train_data),
-            "train_source": train_source,
-        },
-    )
+            "n_train_docs_effective": None,  # inconnu ici (hors parsing DocBin)
+        }
+        save_meta_model(params, "spacy", model_id, model_dir, extra=extra)
+
 
 
 # ----------------- Entraînement sklearn -----------------
-
 
 def train_sklearn_model(params: Dict[str, Any], model_id: str) -> None:
     models_cfg = params["models_cfg"]["families"]["sklearn"][model_id]
@@ -319,25 +342,41 @@ def train_sklearn_model(params: Dict[str, Any], model_id: str) -> None:
     vect_params = dict(vect_cfg.get("params", {}))
     est_params = dict(est_cfg.get("params", {}))
 
+    # Charger les données depuis train.tsv / job.tsv
+    train_texts, train_labels, job_texts = load_tsv_dataset(params)
+
+    # Sous-échantillonnage éventuel en mode debug
+    train_texts, train_labels = maybe_debug_subsample(train_texts, train_labels, params)
+
+    # Limite hardware éventuelle sur le nombre de docs
+    hw = params.get("hardware", {}) or {}
+    max_docs = int(hw.get("max_train_docs_sklearn") or 0)
+    n_raw = len(train_texts)
+    if max_docs > 0 and n_raw > max_docs:
+        print(f"[core_train:sklearn] max_train_docs_sklearn={max_docs}, tronque {n_raw} -> {max_docs} docs")
+        train_texts = train_texts[:max_docs]
+        train_labels = train_labels[:max_docs]
+
+    # Poids de classe éventuels (stratégie 'class_weights')
     if params.get("balance_strategy") == "class_weights":
-        label_counts = Counter(y_train)
+        label_counts = Counter(train_labels)
         class_weights = compute_class_weights_from_counts(label_counts)
         if est_params.get("class_weight") == "from_balance":
             est_params = dict(est_params)
             est_params["class_weight"] = class_weights
 
-    # Ajuster n_jobs si possible
-    max_procs = params.get("hardware", {}).get("max_procs")
+    # Ajuster n_jobs si possible en fonction du preset hardware
+    max_procs = hw.get("max_procs")
     if max_procs and "n_jobs" in est_params and est_params["n_jobs"] in (None, -1):
         est_params["n_jobs"] = max_procs
 
     vectorizer = vect_class(**vect_params)
     estimator = est_class(**est_params)
 
-    train_texts, train_labels, job_texts = load_tsv_dataset(params)
-    train_texts, train_labels = maybe_debug_subsample(train_texts, train_labels, params)
-
-    print(f"[core_train:sklearn] Modèle={model_id}, {len(train_texts)} docs d'entraînement.")
+    print(
+        f"[core_train:sklearn] Modèle={model_id}, "
+        f"{len(train_texts)} docs d'entraînement (raw={n_raw})."
+    )
 
     X_train = vectorizer.fit_transform(train_texts)
     estimator.fit(X_train, train_labels)
@@ -358,10 +397,15 @@ def train_sklearn_model(params: Dict[str, Any], model_id: str) -> None:
             "estimator_class": est_cfg["class"],
             "vectorizer_params": vect_params,
             "estimator_params": est_params,
-            "n_train_docs": len(train_texts),
+            "n_train_docs_raw": int(n_raw),
+            "n_train_docs_effective": int(len(train_texts)),
+            "max_train_docs_sklearn": int(max_docs),
             "n_features": int(getattr(X_train, "shape", (0, 0))[1]),
+            "balance_strategy": params.get("balance_strategy", "none"),
         },
     )
+
+
 
 
 # ----------------- Entraînement HF (squelette) -----------------
@@ -393,6 +437,7 @@ def train_hf_model(params: Dict[str, Any], model_id: str) -> None:
     tokenizer_class_path = models_cfg.get("tokenizer_class", "transformers.AutoTokenizer")
     model_class_path = models_cfg.get("model_class", "transformers.AutoModelForSequenceClassification")
     trainer_params = models_cfg.get("trainer_params", {}) or {}
+    use_class_weights = bool(models_cfg.get("use_class_weights", models_cfg.get("trainer_params", {}).get("use_class_weights", False)))
 
     # ---------- Données ----------
     train_texts, train_labels_str, _job_texts = load_tsv_dataset(params)
@@ -400,6 +445,15 @@ def train_hf_model(params: Dict[str, Any], model_id: str) -> None:
 
     if not train_texts:
         raise SystemExit("[core_train:hf] Dataset d'entraînement vide.")
+
+    # Limite hardware éventuelle
+    hw = params.get("hardware", {}) or {}
+    max_docs = int(hw.get("max_train_docs_hf") or 0)
+    n_raw = len(train_texts)
+    if max_docs > 0 and n_raw > max_docs:
+        print(f"[core_train:hf] max_train_docs_hf={max_docs}, tronque {n_raw} -> {max_docs} docs")
+        train_texts = train_texts[:max_docs]
+        train_labels_str = train_labels_str[:max_docs]
 
     # Mapping label -> id (stable, loggable)
     unique_labels = sorted(set(train_labels_str))
@@ -426,6 +480,20 @@ def train_hf_model(params: Dict[str, Any], model_id: str) -> None:
         id2label=id2label,
         label2id=label2id,
     )
+
+    # ---------- Poids de classe éventuels ----------
+    class_weights_tensor = None
+    label_weights = None
+    if use_class_weights and params.get("balance_strategy") == "class_weights":
+        # Idéalement fournis par core_prepare via params["class_weights"]
+        label_weights = params.get("class_weights")
+        if not label_weights:
+            from collections import Counter
+            label_counts = Counter(train_labels_str)
+            label_weights = compute_class_weights_from_counts(label_counts)
+        # Ordonner les poids selon unique_labels -> vecteur pour CrossEntropyLoss
+        weights_list = [float(label_weights.get(lab, 1.0)) for lab in unique_labels]
+        class_weights_tensor = torch.tensor(weights_list, dtype=torch.float)
 
     max_length = models_cfg.get("max_length") or trainer_params.get("max_length", 256)
 
@@ -467,11 +535,10 @@ def train_hf_model(params: Dict[str, Any], model_id: str) -> None:
     warmup_ratio = float(trainer_params.get("warmup_ratio", 0.0))
     grad_accum = int(trainer_params.get("gradient_accumulation_steps", 1))
 
-    from transformers import TrainingArguments, Trainer  # re-import local, safe
-
     training_args = TrainingArguments(
         output_dir=str(output_dir),
         learning_rate=learning_rate,
+        per_device_train_batch_size=train_batch_size,
         per_device_train_batch_size=train_batch_size,
         per_device_eval_batch_size=eval_batch_size,
         num_train_epochs=num_train_epochs,
@@ -484,14 +551,38 @@ def train_hf_model(params: Dict[str, Any], model_id: str) -> None:
         load_best_model_at_end=False,
     )
 
-    trainer = Trainer(
+    # Trainer pondéré optionnel
+    class WeightedTrainer(Trainer):
+        def __init__(self, *args, class_weights=None, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.class_weights = class_weights
+
+        def compute_loss(self, model, inputs, return_outputs=False):
+            labels = inputs.pop("labels")
+            outputs = model(**inputs)
+            logits = outputs.logits
+            if self.class_weights is not None:
+                loss_fct = torch.nn.CrossEntropyLoss(weight=self.class_weights.to(logits.device))
+            else:
+                loss_fct = torch.nn.CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, logits.size(-1)), labels.view(-1))
+            return (loss, outputs) if return_outputs else loss
+
+    trainer_kwargs = dict(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         tokenizer=tokenizer,
     )
 
-    print(f"[core_train:hf] Entraînement HF pour '{model_id}' avec {len(train_texts)} docs.")
+    if class_weights_tensor is not None:
+        TrainerCls = WeightedTrainer
+        trainer_kwargs["class_weights"] = class_weights_tensor
+    else:
+        TrainerCls = Trainer
+
+    print(f"[core_train:hf] Entraînement HF pour '{model_id}' avec {len(train_texts)} docs (raw={n_raw}).")
+    trainer = TrainerCls(**trainer_kwargs)
     trainer.train()
 
     # Sauvegarde du modèle final + tokenizer dans model_dir
@@ -503,9 +594,14 @@ def train_hf_model(params: Dict[str, Any], model_id: str) -> None:
         "label2id": label2id,
         "id2label": id2label,
         "trainer_params": trainer_params,
-        "n_train_docs": len(train_texts),
+        "use_class_weights": use_class_weights,
+        "class_weights": label_weights,
+        "n_train_docs_raw": int(n_raw),
+        "n_train_docs_effective": int(len(train_texts)),
+        "max_train_docs_hf": int(max_docs),
     }
     save_meta_model(params, "hf", model_id, model_dir, extra=extra)
+
 
 
 
@@ -551,7 +647,7 @@ def main() -> None:
         debug_print_params(params)
 
     # Seed de base pour une reproductibilité minimaliste
-    random.seed(42)
+    random.seed(int(params.get("seed", 42)))
 
     hw = params.get("hardware", {})
     blas_threads = hw.get("blas_threads", 1)

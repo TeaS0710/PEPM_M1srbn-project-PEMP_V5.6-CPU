@@ -16,6 +16,9 @@ presets:
     blas_threads: 2
     tsv_chunk_rows: 50000
     spacy_shard_docs: 25000
+    max_train_docs_spacy: 50000
+    max_train_docs_sklearn: 50000
+    max_train_docs_hf: 20000
 
   lab:
     desc: "Machine labo / serveur"
@@ -24,3 +27,6 @@ presets:
     blas_threads: 2
     tsv_chunk_rows: 100000
     spacy_shard_docs: 50000
+    max_train_docs_spacy: 200000
+    max_train_docs_sklearn: 200000
+    max_train_docs_hf: 80000

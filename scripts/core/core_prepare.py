@@ -113,22 +113,36 @@ def get_default_spacy_lang(params: Dict[str, Any]) -> str:
     return "fr"
 
 def count_tokens(text: str, tokenizer_name: str = "split") -> int:
-    """Compter les tokens selon la stratégie configurée."""
+    """Compter les tokens selon la stratégie configurée.
+
+    tokenizer_name :
+      - "split" / None : split() whitespace (comportement historique)
+      - "simple"       : tokeniseur regex (sépare la ponctuation)
+      - "spacy_xx"     : tokenizer spaCy blank("xx")
+      - "spacy"        : alias de "spacy_xx"
+    """
     if not text:
         return 0
 
-    if tokenizer_name == "spacy_xx" or tokenizer_name == "spacy":
+    name = (tokenizer_name or "split").lower()
+
+    # Tokeniseur spaCy
+    if name in ("spacy_xx", "spacy"):
         nlp = get_spacy_xx()
         if nlp is not None:
             # Utiliser le tokenizer spaCy, sans pipeline complète
             doc = nlp.make_doc(text)
             return len(doc)
-        # si spaCy indisponible : fallback split()
-        return len(text.split())
+        # fallback si spaCy indisponible : split whitespace
+        return len(_tokenize_whitespace(text))
 
-    # Valeur par défaut : split() whitespace
-    # tokenizer_name peut être "split" ou absent
-    return len(text.split())
+    # Tokeniseur "simple" regex
+    if name == "simple":
+        return len(_tokenize_simple(text))
+
+    # Par défaut : split() whitespace
+    return len(_tokenize_whitespace(text))
+
 
 
 def compute_class_weights_from_counts(label_counts: Counter) -> Dict[str, float]:
@@ -290,7 +304,12 @@ def build_view(params: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
 
     # Collecte des docs (version V1 : en RAM ; on optimisera plus tard en streaming + sharding)
     docs: List[Dict[str, Any]] = []
-    label_counts = Counter()
+    # Construire la distribution des labels
+    label_counts = Counter(doc["label"] for doc in docs)
+    label_counts_before = Counter(label_counts)
+
+    if not docs:
+        raise RuntimeError("Aucun document valide après filtrage.")
     modality_counts = Counter()
 
     print(f"[core_prepare] Lecture TEI: {tei_path}")
@@ -354,8 +373,9 @@ def build_view(params: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
 
     # Appliquer l'équilibrage
     docs_balanced, label_counts_balanced = apply_balance(
-        docs, label_counts, balance_strategy, balance_preset, params
+        docs, params, label_counts
     )
+
 
     print(f"[core_prepare] Docs après équilibrage ({balance_strategy}): {len(docs_balanced)}")
     print(f"[core_prepare] Répartition labels (après balance): {label_counts_balanced}")
@@ -392,12 +412,16 @@ def build_view(params: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
         "modality_counts": dict(modality_counts),
         "params_hardware": params.get("hardware", {}),
         "pipeline_version": PIPELINE_VERSION,
+        "n_docs_balanced": len(docs_balanced),
+        "label_counts_before": dict(label_counts_before),
+        "label_counts_after": dict(label_counts_balanced),
 
     }
 
     # Si on utilise une stratégie par poids, on loggue aussi les poids par label
-    if balance_strategy == "class_weights":
-        meta["label_weights"] = compute_class_weights_from_counts(label_counts_balanced)
+    class_weights = params.get("class_weights")
+    if class_weights is not None:
+        meta["label_weights"] = class_weights
 
 
     if dry_run:
@@ -581,103 +605,84 @@ def apply_balance(
     params: Dict[str, Any],
     label_counts: Counter,
 ) -> Tuple[List[Dict[str, Any]], Counter]:
-    """Appliquer les stratégies d'équilibrage définies dans balance.yml.
+    """
+    Appliquer la stratégie d'équilibrage configurée.
 
     Stratégies supportées :
-      - none           : pas de changement
-      - cap_docs       : cap par label en nombre de docs
-      - alpha_total    : rééchantillonnage selon alpha/total_docs (style V2)
-      - cap_tokens     : cap par label en nombre de tokens
-      - class_weights  : ne modifie pas les docs, ajoute seulement un poids par doc
+      - "none"         : pas de modification
+      - "cap_docs"     : cap sur le nombre de documents par label
+      - "cap_tokens"   : cap sur le nombre de tokens par label
+      - "alpha_total"  : quotas par label (version V2)
+      - "class_weights": pas de resampling, calcul de poids de classe
     """
-    strategy = params.get("balance_strategy", "none") or "none"
-    if strategy == "none":
+    strategy = params.get("balance_strategy", "none")
+    balance_cfg = params.get("balance_cfg", {})
+    preset_name = params.get("balance_preset")
+    presets = balance_cfg.get("presets", {})
+    preset = presets.get(preset_name, {}) if preset_name else {}
+    seed = int(params.get("seed", 42))
+
+    # No-op
+    if strategy == "none" or not strategy:
         return docs, label_counts
 
-    strategies_cfg = params.get("balance_cfg", {}).get("strategies", {})
-    strat_cfg = strategies_cfg.get(strategy)
-    preset_name = params.get("balance_preset", "default")
-
-    preset = None
-    if isinstance(strat_cfg, dict):
-        # strat_cfg peut être {preset_name: {...}} ou {"default": {...}, ...}
-        if "default" in strat_cfg or preset_name in strat_cfg:
-            preset = strat_cfg.get(preset_name) or strat_cfg.get("default")
-        else:
-            preset = strat_cfg
-
-    # cap_docs : limiter à cap_per_label, éventuellement avec oversample
+    # Cap sur le nombre de documents par label
     if strategy == "cap_docs":
-        if not preset:
-            print("[core_prepare] WARNING: cap_docs sans preset, aucun équilibrage.")
+        cap_per_label = preset.get("cap_per_label")
+        if cap_per_label is None:
+            # Pas de preset valide → on ne touche pas aux données
             return docs, label_counts
-
-        cap = preset.get("cap_per_label")
-        if not cap:
-            print("[core_prepare] WARNING: cap_docs sans cap_per_label, aucun équilibrage.")
-            return docs, label_counts
-
-        oversample = bool(preset.get("oversample", False))
-        offset = int(preset.get("offset", 0))
-        new_docs = rebalance_cap_docs(
+        new_docs, new_counts = rebalance_cap_docs(
             docs=docs,
-            cap=int(cap),
-            oversample=oversample,
-            offset=offset,
-        )
-        new_counts = Counter(d["label"] for d in new_docs)
-        return new_docs, new_counts
-
-    # alpha_total : rééchantillonnage (oversampling implicite) avec alpha & total_docs
-    if strategy == "alpha_total":
-        if not preset:
-            print("[core_prepare] WARNING: alpha_total sans preset, aucun équilibrage.")
-            return docs, label_counts
-
-        alpha = float(preset.get("alpha", 0.5))
-        total_docs = int(preset.get("total_docs", len(docs)))
-        if total_docs <= 0:
-            total_docs = len(docs)
-
-        seed = int(params.get("seed", 42))
-        new_docs = rebalance_alpha_total(
-            docs=docs,
-            alpha=alpha,
-            total=total_docs,
+            label_counts=label_counts,
+            cap_per_label=cap_per_label,
             seed=seed,
         )
-        new_counts = Counter(d["label"] for d in new_docs)
         return new_docs, new_counts
 
-    # cap_tokens : limiter/cibler un nombre total de tokens par label
+    # Cap sur le nombre de tokens par label
     if strategy == "cap_tokens":
-        if not preset:
-            print("[core_prepare] WARNING: cap_tokens sans preset, aucun équilibrage.")
+        cap_tokens_per_label = preset.get("cap_tokens_per_label")
+        if cap_tokens_per_label is None:
             return docs, label_counts
-
-        cap_tokens = preset.get("cap_tokens_per_label")
-        if not cap_tokens:
-            print("[core_prepare] WARNING: cap_tokens sans cap_tokens_per_label, aucun équilibrage.")
-            return docs, label_counts
-
-        offset = int(preset.get("offset", 0))
-        new_docs = rebalance_cap_tokens(
+        tokenizer_name = params.get("tokenizer", "split")
+        new_docs, new_counts = rebalance_cap_tokens(
             docs=docs,
-            cap_tokens=int(cap_tokens),
-            offset=offset,
+            label_counts=label_counts,
+            cap_tokens_per_label=cap_tokens_per_label,
+            tokenizer_name=tokenizer_name,
+            seed=seed,
         )
-        new_counts = Counter(d["label"] for d in new_docs)
         return new_docs, new_counts
 
-    # class_weights : ne modifie pas les docs, calcule des poids par label
+    # Stratégie alpha_total (version V2 : quotas par label + oversampling contrôlé)
+    if strategy == "alpha_total":
+        alpha = float(preset.get("alpha", 1.0))
+        total_docs = preset.get("total_docs")
+        offset = int(preset.get("offset", 0))
+        if total_docs is None:
+            total_docs = len(docs)
+        new_docs, new_counts = rebalance_alpha_total(
+            docs=docs,
+            label_counts=label_counts,
+            alpha=alpha,
+            total_docs=int(total_docs),
+            offset=offset,
+            seed=seed,
+        )
+        return new_docs, new_counts
+
+    # Stratégie par poids de classe uniquement : pas de resampling
     if strategy == "class_weights":
-        weights = compute_class_weights_from_counts(label_counts)
-        for d in docs:
-            d["weight"] = float(weights.get(d["label"], 1.0))
+        # On ne modifie pas docs : on calcule juste des poids à utiliser plus tard
+        label_weights = compute_class_weights_from_counts(label_counts)
+        # On les stocke dans params pour que core_train puisse les récupérer
+        params["class_weights"] = label_weights
         return docs, label_counts
 
-    print(f"[core_prepare] WARNING: stratégie '{strategy}' non implémentée, aucun équilibrage.")
+    # Stratégie inconnue → no-op
     return docs, label_counts
+
 
 
 
@@ -705,21 +710,36 @@ def build_formats(params: Dict[str, Any], meta_view: Dict[str, Any]) -> None:
     job_tsv = interim_dir / "job.tsv"
 
     formats_meta: Dict[str, Any] = {
-        "profile": params.get("profile"),
+        # "profile": params.get("profile"),
         "corpus_id": corpus_id,
         "view": view,
         "pipeline_version": PIPELINE_VERSION,
         "families": {},
     }
-
     # ---- spaCy : construction des DocBin ----
     if "spacy" in families:
+        # S'assurer que la clé "families" existe dans formats_meta
+        formats_meta.setdefault("families", {})
+
         spacy_dir = processed_dir / "spacy"
         spacy_dir.mkdir(parents=True, exist_ok=True)
 
         hardware = params.get("hardware", {}) or {}
         shard_docs = int(hardware.get("spacy_shard_docs") or 0)
-        # tsv_chunk_rows existe peut-être dans hardware.yml, mais ici on lit simplement ligne par ligne
+        # NOTE : max_train_docs_spacy pourra être utilisé plus tard dans train_spacy_model
+        lang = get_default_spacy_lang(params)
+
+    # ---- spaCy : construction des DocBin ----
+    if "spacy" in families:
+        # S'assurer que la clé "families" existe dans formats_meta
+        formats_meta.setdefault("families", {})
+
+        spacy_dir = processed_dir / "spacy"
+        spacy_dir.mkdir(parents=True, exist_ok=True)
+
+        hardware = params.get("hardware", {}) or {}
+        shard_docs = int(hardware.get("spacy_shard_docs") or 0)
+        # NOTE : max_train_docs_spacy pourra être utilisé plus tard dans train_spacy_model
         lang = get_default_spacy_lang(params)
 
         if spacy is None:
@@ -751,7 +771,7 @@ def build_formats(params: Dict[str, Any], meta_view: Dict[str, Any]) -> None:
                             continue
                         labels_set.add(label)
                         doc = nlp.make_doc(text)
-                        # On encode le label de manière binaire : 1 pour cette étiquette
+                        # TextCat exclusif : une seule étiquette active
                         doc.cats = {label: 1.0}
                         db.add(doc)
                         docs_in_current += 1
@@ -767,7 +787,7 @@ def build_formats(params: Dict[str, Any], meta_view: Dict[str, Any]) -> None:
                             docs_in_current = 0
 
                 # Dernier shard / fichier unique
-                if len(db) > 0:
+                if docs_in_current > 0:
                     if shard_docs:
                         out_path = spacy_dir / f"{prefix}_{shard_idx:03d}.spacy"
                     else:
@@ -783,13 +803,15 @@ def build_formats(params: Dict[str, Any], meta_view: Dict[str, Any]) -> None:
 
             # Pour compatibilité : si pas de sharding, train_paths/job_paths ont 1 élément
             formats_meta["families"]["spacy"] = {
-                "train_spacy": train_paths if shard_docs else train_paths[0],
-                "job_spacy": job_paths if shard_docs else job_paths[0],
+                "train_spacy": train_paths if shard_docs else (train_paths[0] if train_paths else None),
+                "job_spacy": job_paths if shard_docs else (job_paths[0] if job_paths else None),
                 "labels_set": labels_set,
                 "lang": lang,
                 "n_train_docs": n_train,
                 "n_job_docs": n_job,
+                "spacy_shard_docs": shard_docs,
             }
+
 
 
     # ---- sklearn / hf / check : on référence les TSV ----

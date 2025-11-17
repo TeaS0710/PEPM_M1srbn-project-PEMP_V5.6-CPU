@@ -133,14 +133,23 @@ def resolve_profile_base(profile_name: str, overrides: Optional[List[str]] = Non
         "balance_cfg": balance_cfg,
         "hardware_cfg": hardware_cfg,
         "models_cfg": models_cfg,
+        "seed": profile_cfg.get("seed", 42),
     }
+
+    # Construire le preset hardware effectif
+    hardware_preset = profile_cfg.get("hardware_preset", "small")
+    hardware_presets = hardware_cfg.get("presets", {})
+    hardware = hardware_presets.get(hardware_preset, {})
+    params["hardware_preset"] = hardware_preset
+    params["hardware"] = hardware
+
 
     # Copier les champs simples du profil
     simple_keys = [
         "corpus_id", "view", "modality",
         "label_field", "label_map",
         "train_prop", "min_chars", "max_tokens",
-        "tokenizer",
+        "tokenizer", "seed",
         "balance_strategy", "balance_preset",
         "families",
         "models_spacy", "models_sklearn", "models_hf", "models_check",
@@ -151,14 +160,12 @@ def resolve_profile_base(profile_name: str, overrides: Optional[List[str]] = Non
             params[k] = profile_cfg[k]
 
     # Appliquer preset hardware
-    hw_name = profile_cfg.get("hardware_preset")
-    if hw_name:
-        presets = hardware_cfg.get("presets", {})
-        if hw_name not in presets:
-            raise SystemExit(f"[config] hardware_preset '{hw_name}' inconnu")
-        params["hardware"] = presets[hw_name]
-    else:
-        params["hardware"] = {}
+    hardware_preset = profile_cfg.get("hardware_preset", "small")
+    hardware = hardware_cfg.get("presets", {}).get(hardware_preset, {})
+    hardware = hardware_presets.get(hardware_preset, {})
+    params["hardware_preset"] = hardware_preset
+    params["hardware"] = hardware
+
 
     # Appliquer overrides CLI (sur params entiers)
     params["pipeline_version"] = PIPELINE_VERSION

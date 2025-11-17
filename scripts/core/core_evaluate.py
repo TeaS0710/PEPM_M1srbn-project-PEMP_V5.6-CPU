@@ -132,9 +132,10 @@ def maybe_debug_subsample_eval(
     if len(texts) <= max_docs:
         return texts, labels
 
-    print(f"[core_evaluate] debug_mode actif : sous-échantillon de {max_docs} docs sur {len(texts)}")
+    seed = int(params.get("seed", 42))
+    print(f"[core_evaluate] debug_mode actif : sous-échantillon de {max_docs} docs sur {len(texts)} (seed={seed})")
     indices = list(range(len(texts)))
-    random.Random(123).shuffle(indices)
+    random.Random(seed).shuffle(indices)
     idx_sel = sorted(indices[:max_docs])
     texts_sub = [texts[i] for i in idx_sel]
     labels_sub = [labels[i] for i in idx_sel]
@@ -448,7 +449,7 @@ def main() -> None:
     if args.verbose:
         debug_print_params(params)
 
-    random.seed(42)  # un minimum de reproductibilité
+    random.seed(int(params.get("seed", 42)))  # un minimum de reproductibilité
     hw = params.get("hardware", {})
     blas_threads = hw.get("blas_threads", 1)
     set_blas_threads(blas_threads)
