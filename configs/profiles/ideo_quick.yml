@@ -16,7 +16,7 @@ max_tokens: 512
 
 tokenizer: "spacy_xx"
 
-balance_strategy: "alpha_total"
+balance_strategy: "class_weights"
 balance_preset: "default_alpha_total"
 
 families:

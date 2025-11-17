@@ -6,7 +6,7 @@ import json
 import os
 import random
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from pathlib import Path
 
@@ -98,6 +98,19 @@ def get_spacy_xx():
         _SPACY_XX_NLP = None
         return None
 
+def get_default_spacy_lang(params: Dict[str, Any]) -> str:
+    """Choisir une langue par défaut pour la construction des DocBin spaCy.
+
+    On essaie d'abord de regarder dans models.yml (famille spacy),
+    via les modèles référencés par le profil. Sinon, on tombe sur 'fr'.
+    """
+    families_cfg = params.get("models_cfg", {}).get("families", {})
+    spacy_models = families_cfg.get("spacy", {})
+    for mid in (params.get("models_spacy") or []):
+        cfg = spacy_models.get(mid)
+        if cfg and cfg.get("lang"):
+            return cfg["lang"]
+    return "fr"
 
 def count_tokens(text: str, tokenizer_name: str = "split") -> int:
     """Compter les tokens selon la stratégie configurée."""
@@ -431,11 +444,8 @@ def write_tsv(path: str, docs: List[Dict[str, Any]]) -> None:
 
 # ----------------- Équilibrage -----------------
 
-# ----------------- Équilibrage (helpers V2) -----------------
-
-
 def rebalance_cap_docs(
-    train: List[Dict[str, Any]],
+    docs: List[Dict[str, Any]],
     cap: int,
     oversample: bool,
     offset: int,
@@ -447,10 +457,8 @@ def rebalance_cap_docs(
     - Si oversample=True et qu'on a moins que cap, on duplique des docs jusqu'à cap.
     - On mélange à la fin.
     """
-    from collections import defaultdict
-
     by = defaultdict(list)
-    for d in train:
+    for d in docs:
         by[d["label"]].append(d)
 
     rng = random.Random(offset)
@@ -474,19 +482,17 @@ def rebalance_cap_docs(
 
 
 def rebalance_cap_tokens(
-    train: List[Dict[str, Any]],
+    docs: List[Dict[str, Any]],
     cap_tokens: int,
     offset: int,
 ) -> List[Dict[str, Any]]:
-    """Reprise V2 pour cap_tokens.
+    """Reprise V2 pour cap_tokens (par label).
 
     On sélectionne, par label, suffisamment de docs (et de duplications)
     pour atteindre ~cap_tokens tokens.
     """
-    from collections import defaultdict
-
     by = defaultdict(list)
-    for d in train:
+    for d in docs:
         by[d["label"]].append(d)
 
     out: List[Dict[str, Any]] = []
@@ -503,15 +509,15 @@ def rebalance_cap_tokens(
             if tot >= cap_tokens:
                 break
             buf.append(d)
-            tot += d.get("tokens", 0)
+            tot += int(d.get("tokens") or 0)
         # Si on n'a toujours pas assez de tokens, on duplique
         i = 0
-        while tot < cap_tokens and i < n:
+        while tot < cap_tokens and i < max(n, 1):
             dd = rot[i % n]
             dup = dict(dd)
             dup["id"] = f'{dd["id"]}#dup{i+1}'
             buf.append(dup)
-            tot += dd.get("tokens", 0)
+            tot += int(dd.get("tokens") or 0)
             i += 1
         out.extend(buf)
     random.Random(offset).shuffle(out)
@@ -519,7 +525,7 @@ def rebalance_cap_tokens(
 
 
 def rebalance_alpha_total(
-    train: List[Dict[str, Any]],
+    docs: List[Dict[str, Any]],
     alpha: float,
     total: int,
     seed: int,
@@ -530,24 +536,23 @@ def rebalance_alpha_total(
     - Poids w(label) = (cnt(label) ** alpha).
     - Probabilité p(label) = w(label) / sum(w).
     - Quotas entiers par arrondi, ajustés pour total.
-    - Echantillonnage avec duplication si besoin.
+    - Échantillonnage avec duplication si besoin.
     """
-    from collections import defaultdict
-
     by = defaultdict(list)
-    for d in train:
+    for d in docs:
         by[d["label"]].append(d)
 
+    # comptages
     cnt = {lab: len(L) for lab, L in by.items()}
     w = {lab: (c ** alpha) for lab, c in cnt.items() if c > 0}
     z = sum(w.values()) or 1.0
     probs = {lab: wv / z for lab, wv in w.items()}
     quotas = {lab: max(1, int(round(total * p))) for lab, p in probs.items()}
 
+    # Ajuster quotas pour que la somme soit exactement total
     diff = total - sum(quotas.values())
     labs = list(quotas.keys())
     i = 0
-    # Ajuster les quotas pour que la somme soit exactement total
     while diff != 0 and labs:
         quotas[labs[i % len(labs)]] += 1 if diff > 0 else -1
         i += 1
@@ -573,52 +578,57 @@ def rebalance_alpha_total(
 
 def apply_balance(
     docs: List[Dict[str, Any]],
-    label_counts: Counter,
-    strategy: str,
-    preset_name: Optional[str],
     params: Dict[str, Any],
+    label_counts: Counter,
 ) -> Tuple[List[Dict[str, Any]], Counter]:
-    """
-    Appliquer une stratégie d'équilibrage simple.
+    """Appliquer les stratégies d'équilibrage définies dans balance.yml.
 
-    NOTE : ceci est une V1 simplifiée.
-    Pour reproduire EXACTEMENT le comportement V2, tu pourras
-    remplacer cette logique par le code historique de tei_to_train_job.py.
+    Stratégies supportées :
+      - none           : pas de changement
+      - cap_docs       : cap par label en nombre de docs
+      - alpha_total    : rééchantillonnage selon alpha/total_docs (style V2)
+      - cap_tokens     : cap par label en nombre de tokens
+      - class_weights  : ne modifie pas les docs, ajoute seulement un poids par doc
     """
-    if strategy == "none" or not strategy:
+    strategy = params.get("balance_strategy", "none") or "none"
+    if strategy == "none":
         return docs, label_counts
 
-    balance_cfg = params.get("balance_cfg", {})
-    strat_cfg = balance_cfg.get("strategies", {}).get(strategy)
-    if not strat_cfg:
-        print(f"[core_prepare] WARNING: stratégie '{strategy}' inconnue, aucun équilibrage appliqué.")
-        return docs, label_counts
+    strategies_cfg = params.get("balance_cfg", {}).get("strategies", {})
+    strat_cfg = strategies_cfg.get(strategy)
+    preset_name = params.get("balance_preset", "default")
 
-    presets = strat_cfg.get("presets", {})
-    preset = presets.get(preset_name) if preset_name else None
+    preset = None
+    if isinstance(strat_cfg, dict):
+        # strat_cfg peut être {preset_name: {...}} ou {"default": {...}, ...}
+        if "default" in strat_cfg or preset_name in strat_cfg:
+            preset = strat_cfg.get(preset_name) or strat_cfg.get("default")
+        else:
+            preset = strat_cfg
 
-    by_label: Dict[str, List[Dict[str, Any]]] = {}
-    for d in docs:
-        by_label.setdefault(d["label"], []).append(d)
-
-    # ---- cap_docs ----
+    # cap_docs : limiter à cap_per_label, éventuellement avec oversample
     if strategy == "cap_docs":
-        cap = preset.get("cap_per_label") if preset else None
+        if not preset:
+            print("[core_prepare] WARNING: cap_docs sans preset, aucun équilibrage.")
+            return docs, label_counts
+
+        cap = preset.get("cap_per_label")
         if not cap:
             print("[core_prepare] WARNING: cap_docs sans cap_per_label, aucun équilibrage.")
             return docs, label_counts
 
-        # Reprise V2 avec oversample=False, offset=0 (comportement par défaut)
+        oversample = bool(preset.get("oversample", False))
+        offset = int(preset.get("offset", 0))
         new_docs = rebalance_cap_docs(
-            train=docs,
+            docs=docs,
             cap=int(cap),
-            oversample=False,
-            offset=0,
+            oversample=oversample,
+            offset=offset,
         )
         new_counts = Counter(d["label"] for d in new_docs)
         return new_docs, new_counts
 
-    # ---- alpha_total ----
+    # alpha_total : rééchantillonnage (oversampling implicite) avec alpha & total_docs
     if strategy == "alpha_total":
         if not preset:
             print("[core_prepare] WARNING: alpha_total sans preset, aucun équilibrage.")
@@ -631,7 +641,7 @@ def apply_balance(
 
         seed = int(params.get("seed", 42))
         new_docs = rebalance_alpha_total(
-            train=docs,
+            docs=docs,
             alpha=alpha,
             total=total_docs,
             seed=seed,
@@ -639,27 +649,28 @@ def apply_balance(
         new_counts = Counter(d["label"] for d in new_docs)
         return new_docs, new_counts
 
-    # ---- cap_tokens ----
+    # cap_tokens : limiter/cibler un nombre total de tokens par label
     if strategy == "cap_tokens":
-        cap_tokens = None
-        if preset:
-            cap_tokens = preset.get("cap_tokens_per_label")
+        if not preset:
+            print("[core_prepare] WARNING: cap_tokens sans preset, aucun équilibrage.")
+            return docs, label_counts
+
+        cap_tokens = preset.get("cap_tokens_per_label")
         if not cap_tokens:
             print("[core_prepare] WARNING: cap_tokens sans cap_tokens_per_label, aucun équilibrage.")
             return docs, label_counts
 
+        offset = int(preset.get("offset", 0))
         new_docs = rebalance_cap_tokens(
-            train=docs,
+            docs=docs,
             cap_tokens=int(cap_tokens),
-            offset=0,  # même valeur par défaut qu'en V2
+            offset=offset,
         )
         new_counts = Counter(d["label"] for d in new_docs)
         return new_docs, new_counts
 
+    # class_weights : ne modifie pas les docs, calcule des poids par label
     if strategy == "class_weights":
-        # Équilibrage par poids :
-        # - on ne modifie pas la distribution de docs,
-        # - on annote chaque doc avec un poids dérivé de label_counts.
         weights = compute_class_weights_from_counts(label_counts)
         for d in docs:
             d["weight"] = float(weights.get(d["label"], 1.0))
@@ -667,6 +678,7 @@ def apply_balance(
 
     print(f"[core_prepare] WARNING: stratégie '{strategy}' non implémentée, aucun équilibrage.")
     return docs, label_counts
+
 
 
 # ----------------- Formats (TSV -> formats modèles) -----------------
@@ -702,8 +714,83 @@ def build_formats(params: Dict[str, Any], meta_view: Dict[str, Any]) -> None:
 
     # ---- spaCy : construction des DocBin ----
     if "spacy" in families:
-        spacy_info = build_spacy_formats(params, train_tsv, job_tsv, processed_root)
-        formats_meta["families"]["spacy"] = spacy_info
+        spacy_dir = processed_dir / "spacy"
+        spacy_dir.mkdir(parents=True, exist_ok=True)
+
+        hardware = params.get("hardware", {}) or {}
+        shard_docs = int(hardware.get("spacy_shard_docs") or 0)
+        # tsv_chunk_rows existe peut-être dans hardware.yml, mais ici on lit simplement ligne par ligne
+        lang = get_default_spacy_lang(params)
+
+        if spacy is None:
+            print("[core_prepare] WARNING: spaCy indisponible, impossible de construire les DocBin.")
+        else:
+            from spacy.tokens import DocBin
+
+            def build_docbins(tsv_path: Path, prefix: str) -> Tuple[set, List[str], int]:
+                """Construire un ou plusieurs DocBin à partir d'un TSV.
+
+                Retourne (labels_set, chemins_relatifs, nb_docs).
+                """
+                labels_set: set = set()
+                docbin_paths: List[str] = []
+                total_docs = 0
+                shard_idx = 0
+
+                nlp = spacy.blank(lang)
+                # On ne monte pas de pipeline complète ici, seulement le tokenizer
+                db = DocBin()
+                docs_in_current = 0
+
+                with tsv_path.open("r", encoding="utf-8", newline="") as f:
+                    reader = csv.DictReader(f, delimiter="\t")
+                    for row in reader:
+                        text = row.get("text", "")
+                        label = row.get("label")
+                        if label is None:
+                            continue
+                        labels_set.add(label)
+                        doc = nlp.make_doc(text)
+                        # On encode le label de manière binaire : 1 pour cette étiquette
+                        doc.cats = {label: 1.0}
+                        db.add(doc)
+                        docs_in_current += 1
+                        total_docs += 1
+
+                        # Sharding éventuel
+                        if shard_docs and docs_in_current >= shard_docs:
+                            out_path = spacy_dir / f"{prefix}_{shard_idx:03d}.spacy"
+                            db.to_disk(out_path)
+                            docbin_paths.append(out_path.name)
+                            shard_idx += 1
+                            db = DocBin()
+                            docs_in_current = 0
+
+                # Dernier shard / fichier unique
+                if len(db) > 0:
+                    if shard_docs:
+                        out_path = spacy_dir / f"{prefix}_{shard_idx:03d}.spacy"
+                    else:
+                        out_path = spacy_dir / f"{prefix}.spacy"
+                    db.to_disk(out_path)
+                    docbin_paths.append(out_path.name)
+
+                return labels_set, docbin_paths, total_docs
+
+            labels_train, train_paths, n_train = build_docbins(train_tsv, "train")
+            labels_job, job_paths, n_job = build_docbins(job_tsv, "job")
+            labels_set = sorted(labels_train.union(labels_job))
+
+            # Pour compatibilité : si pas de sharding, train_paths/job_paths ont 1 élément
+            formats_meta["families"]["spacy"] = {
+                "train_spacy": train_paths if shard_docs else train_paths[0],
+                "job_spacy": job_paths if shard_docs else job_paths[0],
+                "labels_set": labels_set,
+                "lang": lang,
+                "n_train_docs": n_train,
+                "n_job_docs": n_job,
+            }
+
 
     # ---- sklearn / hf / check : on référence les TSV ----
     # (ils continueront d'utiliser train.tsv/job.tsv directement)

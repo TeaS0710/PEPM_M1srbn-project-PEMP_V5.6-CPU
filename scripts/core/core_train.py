@@ -6,6 +6,7 @@ import json
 import os
 import random
 import importlib
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -50,6 +51,28 @@ def parse_args() -> argparse.Namespace:
 
 
 # ----------------- Utils généraux -----------------
+
+def compute_class_weights_from_counts(label_counts: Counter) -> Dict[str, float]:
+    """
+    Même formule que dans core_prepare : w(label) = n_samples / (n_labels * n_label).
+
+    Utilisé ici pour remplir class_weight des modèles sklearn quand la
+    stratégie d'équilibrage est 'class_weights' et que le config demande
+    explicitement class_weight: "from_balance".
+    """
+    total = sum(label_counts.values())
+    n_labels = len(label_counts) or 1
+    if total <= 0:
+        return {lab: 1.0 for lab in label_counts}
+
+    weights: Dict[str, float] = {}
+    for lab, c in label_counts.items():
+        if c <= 0:
+            weights[lab] = 0.0
+        else:
+            weights[lab] = total / (n_labels * c)
+    return weights
+
 
 
 def set_blas_threads(n_threads: int) -> None:
@@ -175,7 +198,6 @@ def save_meta_model(
 
 # ----------------- Entraînement spaCy -----------------
 
-
 def train_spacy_model(params: Dict[str, Any], model_id: str) -> None:
     try:
         import spacy
@@ -188,28 +210,31 @@ def train_spacy_model(params: Dict[str, Any], model_id: str) -> None:
     lang = models_cfg.get("lang", "fr")
     epochs = int(models_cfg.get("epochs", 5))
     dropout = float(models_cfg.get("dropout", 0.2))
-    arch = models_cfg.get("arch", None)  # "bow" ou "cnn"
-    config_template = models_cfg.get("config_template")  # pour V4+
+    arch = models_cfg.get("arch", None)  # "bow" ou "cnn" (info logguée pour l'instant)
+    config_template = models_cfg.get("config_template")  # pour une future V4+ avec configs spaCy
 
-    corpus_id = params.get("corpus_id", params["corpus"].get("corpus_id", "unknown_corpus"))
+    corpus_id = params.get("corpus_id", params.get("corpus", {}).get("corpus_id", "unknown_corpus"))
     view = params.get("view", "unknown_view")
 
-    # Chemins vers éventuels DocBin produits par core_prepare
+    # Répertoire où core_prepare a mis les DocBin éventuels
     spacy_proc_dir = Path("data") / "processed" / corpus_id / view / "spacy"
-    train_docbin_path = spacy_proc_dir / "train.spacy"
 
     nlp = spacy.blank(lang)
 
     train_data: List[Tuple[str, Dict[str, float]]] = []
     labels_set: List[str] = []
 
-    if train_docbin_path.exists():
-        # ---- Cas 1 : on utilise les DocBin créés par core_prepare ----
-        print(f"[core_train:spacy] Utilisation de DocBin : {train_docbin_path}")
-        db = DocBin().from_disk(train_docbin_path)
-        docs = list(db.get_docs(nlp.vocab))
+    # Chercher tous les DocBin "train*.spacy" (shardés ou non)
+    train_docbins = sorted(spacy_proc_dir.glob("train*.spacy"))
 
-        # Sous-échantillon si debug_mode
+    if train_docbins:
+        print(f"[core_train:spacy] Utilisation de {len(train_docbins)} DocBin train*.spacy dans {spacy_proc_dir}")
+        docs = []
+        for path in train_docbins:
+            db = DocBin().from_disk(path)
+            docs.extend(list(db.get_docs(nlp.vocab)))
+
+        # Sous-échantillon si debug_mode (comme pour le TSV)
         if params.get("debug_mode") and len(docs) > 1000:
             print(f"[core_train:spacy] debug_mode actif : sous-échantillon de 1000 docs sur {len(docs)}")
             docs = docs[:1000]
@@ -218,11 +243,12 @@ def train_spacy_model(params: Dict[str, Any], model_id: str) -> None:
             {lab for doc in docs for lab, val in doc.cats.items() if val}
         )
         for doc in docs:
-            # doc.cats est déjà un dict {label: bool}
+            # doc.cats est déjà un dict {label: score/bool}
             train_data.append((doc.text, dict(doc.cats)))
+        train_source = "docbin"
     else:
-        # ---- Cas 2 : fallback TSV (compatible avec l'ancien flux V2) ----
-        print("[core_train:spacy] Aucun DocBin trouvé, fallback sur train.tsv")
+        # ---- Fallback TSV (compatible ancien flux V2) ----
+        print(f"[core_train:spacy] Aucun DocBin train*.spacy trouvé, fallback sur train.tsv")
         train_texts, train_labels, _job_texts = load_tsv_dataset(params)
         train_texts, train_labels = maybe_debug_subsample(train_texts, train_labels, params)
 
@@ -230,21 +256,21 @@ def train_spacy_model(params: Dict[str, Any], model_id: str) -> None:
         for text, label in zip(train_texts, train_labels):
             cats = {lab: (lab == label) for lab in labels_set}
             train_data.append((text, cats))
+        train_source = "tsv"
 
     print(f"[core_train:spacy] Modèle={model_id}, labels={labels_set}, n_train_docs={len(train_data)}")
 
-    # Construction du pipe textcat
+    # Construction du pipe textcat (simple, multi-classes exclusif pour l'instant)
     if "textcat" not in nlp.pipe_names:
         textcat = nlp.add_pipe("textcat")
     else:
         textcat = nlp.get_pipe("textcat")
 
     # On part sur un textcat multi-classes exclusif
-    textcat.add_label  # type: ignore[attr-defined]
     for label in labels_set:
         textcat.add_label(label)  # type: ignore[call-arg]
 
-    # Initialisation
+    # Initialisation & entraînement
     optimizer = nlp.begin_training()
     print(f"[core_train:spacy] Entraînement pour {epochs} epochs.")
     for epoch in range(epochs):
@@ -274,10 +300,9 @@ def train_spacy_model(params: Dict[str, Any], model_id: str) -> None:
             "config_template": config_template,
             "labels": labels_set,
             "n_train_docs": len(train_data),
-            "train_source": "docbin" if train_docbin_path.exists() else "tsv",
+            "train_source": train_source,
         },
     )
-
 
 
 # ----------------- Entraînement sklearn -----------------
@@ -293,6 +318,13 @@ def train_sklearn_model(params: Dict[str, Any], model_id: str) -> None:
 
     vect_params = dict(vect_cfg.get("params", {}))
     est_params = dict(est_cfg.get("params", {}))
+
+    if params.get("balance_strategy") == "class_weights":
+        label_counts = Counter(y_train)
+        class_weights = compute_class_weights_from_counts(label_counts)
+        if est_params.get("class_weight") == "from_balance":
+            est_params = dict(est_params)
+            est_params["class_weight"] = class_weights
 
     # Ajuster n_jobs si possible
     max_procs = params.get("hardware", {}).get("max_procs")
@@ -337,15 +369,144 @@ def train_sklearn_model(params: Dict[str, Any], model_id: str) -> None:
 
 def train_hf_model(params: Dict[str, Any], model_id: str) -> None:
     """
-    Squelette pour HuggingFace. À implémenter plus finement plus tard
-    (datasets, Trainer, etc.). Pour l'instant : placeholder avec message.
+    Entraînement générique HuggingFace (famille 'hf') en mode config-first.
+
+    - Lit les hyperparamètres dans params["models_cfg"]["families"]["hf"][model_id]
+    - Lit les données via load_tsv_dataset(params)
+    - Ne dépend d'aucune logique spécifique au modèle :
+      ajout de modèles via models.yml uniquement.
     """
-    print(f"[core_train:hf] TODO: entraînement HF pour le modèle '{model_id}' n'est pas encore implémenté.")
-    # Quand tu seras prêt :
-    # - Charger datasets à partir de train.tsv/job.tsv
-    # - Initialiser tokenizer & modèle (AutoTokenizer, AutoModelForSequenceClassification)
-    # - Trainer(...) avec training_args
-    # - Sauver le modèle + meta_model.json
+    try:
+        import torch
+        from torch.utils.data import Dataset
+        from transformers import TrainingArguments, Trainer
+    except ImportError:
+        print("[core_train:hf] Transformers ou torch non installés. Skip HF.")
+        return
+
+    models_cfg = params["models_cfg"]["families"]["hf"][model_id]
+
+    model_name = models_cfg.get("model_name")
+    if not model_name:
+        raise SystemExit(f"[core_train:hf] 'model_name' manquant pour le modèle HF '{model_id}' dans models.yml")
+
+    tokenizer_class_path = models_cfg.get("tokenizer_class", "transformers.AutoTokenizer")
+    model_class_path = models_cfg.get("model_class", "transformers.AutoModelForSequenceClassification")
+    trainer_params = models_cfg.get("trainer_params", {}) or {}
+
+    # ---------- Données ----------
+    train_texts, train_labels_str, _job_texts = load_tsv_dataset(params)
+    train_texts, train_labels_str = maybe_debug_subsample(train_texts, train_labels_str, params)
+
+    if not train_texts:
+        raise SystemExit("[core_train:hf] Dataset d'entraînement vide.")
+
+    # Mapping label -> id (stable, loggable)
+    unique_labels = sorted(set(train_labels_str))
+    label2id = {lab: i for i, lab in enumerate(unique_labels)}
+    id2label = {i: lab for lab, i in label2id.items()}
+    train_labels = [label2id[lab] for lab in train_labels_str]
+
+    # ---------- Import dynamique des classes HF ----------
+    import importlib
+
+    def import_class(path: str):
+        mod_name, cls_name = path.rsplit(".", 1)
+        mod = importlib.import_module(mod_name)
+        return getattr(mod, cls_name)
+
+    TokCls = import_class(tokenizer_class_path)
+    ModelCls = import_class(model_class_path)
+
+    tokenizer = TokCls.from_pretrained(model_name)
+    num_labels = len(unique_labels)
+    model = ModelCls.from_pretrained(
+        model_name,
+        num_labels=num_labels,
+        id2label=id2label,
+        label2id=label2id,
+    )
+
+    max_length = models_cfg.get("max_length") or trainer_params.get("max_length", 256)
+
+    class HFDataset(Dataset):
+        def __init__(self, texts: List[str], labels: List[int], tokenizer, max_length: int):
+            self.texts = texts
+            self.labels = labels
+            self.tokenizer = tokenizer
+            self.max_length = max_length
+
+        def __len__(self) -> int:
+            return len(self.texts)
+
+        def __getitem__(self, idx: int):
+            enc = self.tokenizer(
+                self.texts[idx],
+                truncation=True,
+                padding="max_length",
+                max_length=self.max_length,
+            )
+            enc = {k: torch.tensor(v) for k, v in enc.items()}
+            enc["labels"] = torch.tensor(self.labels[idx])
+            return enc
+
+    train_dataset = HFDataset(train_texts, train_labels, tokenizer, max_length)
+
+    # ---------- Répertoires de sortie ----------
+    model_dir = get_model_output_dir(params, "hf", model_id)
+    ensure_dir(model_dir)
+    output_dir = model_dir / "hf_outputs"
+    ensure_dir(output_dir)
+
+    # ---------- Hyperparams / hardware (config-first) ----------
+    train_batch_size = int(trainer_params.get("per_device_train_batch_size", 8))
+    eval_batch_size = int(trainer_params.get("per_device_eval_batch_size", train_batch_size))
+    num_train_epochs = float(trainer_params.get("num_train_epochs", 3.0))
+    learning_rate = float(trainer_params.get("learning_rate", 2e-5))
+    weight_decay = float(trainer_params.get("weight_decay", 0.0))
+    warmup_ratio = float(trainer_params.get("warmup_ratio", 0.0))
+    grad_accum = int(trainer_params.get("gradient_accumulation_steps", 1))
+
+    from transformers import TrainingArguments, Trainer  # re-import local, safe
+
+    training_args = TrainingArguments(
+        output_dir=str(output_dir),
+        learning_rate=learning_rate,
+        per_device_train_batch_size=train_batch_size,
+        per_device_eval_batch_size=eval_batch_size,
+        num_train_epochs=num_train_epochs,
+        weight_decay=weight_decay,
+        warmup_ratio=warmup_ratio,
+        gradient_accumulation_steps=grad_accum,
+        evaluation_strategy="no",   # l'éval se fera dans core_evaluate.py
+        save_strategy="epoch",
+        logging_strategy="epoch",
+        load_best_model_at_end=False,
+    )
+
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        tokenizer=tokenizer,
+    )
+
+    print(f"[core_train:hf] Entraînement HF pour '{model_id}' avec {len(train_texts)} docs.")
+    trainer.train()
+
+    # Sauvegarde du modèle final + tokenizer dans model_dir
+    trainer.save_model(str(model_dir))
+    tokenizer.save_pretrained(str(model_dir))
+
+    extra = {
+        "hf_model_name": model_name,
+        "label2id": label2id,
+        "id2label": id2label,
+        "trainer_params": trainer_params,
+        "n_train_docs": len(train_texts),
+    }
+    save_meta_model(params, "hf", model_id, model_dir, extra=extra)
+
 
 
 # ----------------- Entraînement "check" -----------------

@@ -201,6 +201,7 @@ def save_eval_outputs(
 def eval_spacy_model(params: Dict[str, Any], model_id: str) -> None:
     try:
         import spacy
+        from spacy.tokens import DocBin
     except ImportError:
         raise SystemExit("[core_evaluate] spaCy n'est pas installé, impossible d'évaluer la famille 'spacy'.")
 
@@ -212,8 +213,40 @@ def eval_spacy_model(params: Dict[str, Any], model_id: str) -> None:
     print(f"[core_evaluate:spacy] Chargement modèle depuis {model_dir}")
     nlp = spacy.load(model_dir)
 
-    texts, labels_true = load_job_tsv(params)
-    texts, labels_true = maybe_debug_subsample_eval(texts, labels_true, params)
+    # On reconstruit le chemin vers les DocBin éventuels produits par core_prepare
+    corpus_id = params.get("corpus_id", params.get("corpus", {}).get("corpus_id", "unknown_corpus"))
+    view = params.get("view", "unknown_view")
+    spacy_proc_dir = Path("data") / "processed" / corpus_id / view / "spacy"
+
+    # Chercher tous les DocBin "job*.spacy" (shardés ou non)
+    job_docbins = sorted(spacy_proc_dir.glob("job*.spacy"))
+
+    if job_docbins:
+        print(f"[core_evaluate:spacy] Utilisation de {len(job_docbins)} DocBin job*.spacy dans {spacy_proc_dir}")
+        job_docs = []
+        for path in job_docbins:
+            db = DocBin().from_disk(path)
+            job_docs.extend(list(db.get_docs(nlp.vocab)))
+
+        # On extrait textes + labels véritables depuis doc.cats
+        texts = [doc.text for doc in job_docs]
+        labels_true: List[str] = []
+        for doc in job_docs:
+            if not doc.cats:
+                labels_true.append("__NO_LABEL__")
+            else:
+                # label avec score max (gold encodé à 1.0)
+                best_label = max(doc.cats.items(), key=lambda kv: kv[1])[0]
+                labels_true.append(best_label)
+
+        # Sous-échantillon éventuel en debug_mode
+        texts, labels_true = maybe_debug_subsample_eval(texts, labels_true, params)
+
+    else:
+        # ---- Fallback TSV (flux V2) ----
+        print("[core_evaluate:spacy] Aucun DocBin job*.spacy trouvé, fallback sur job.tsv")
+        texts, labels_true = load_job_tsv(params)
+        texts, labels_true = maybe_debug_subsample_eval(texts, labels_true, params)
 
     print(f"[core_evaluate:spacy] Évaluation sur {len(texts)} docs.")
     labels_pred: List[str] = []
@@ -223,7 +256,7 @@ def eval_spacy_model(params: Dict[str, Any], model_id: str) -> None:
         if not doc.cats:
             labels_pred.append("__NO_PRED__")
             continue
-        # label avec score max
+        # label avec score max (prédiction du modèle)
         best_label = max(doc.cats.items(), key=lambda kv: kv[1])[0]
         labels_pred.append(best_label)
 
@@ -233,6 +266,7 @@ def eval_spacy_model(params: Dict[str, Any], model_id: str) -> None:
     metrics["n_eval_docs"] = len(texts)
 
     save_eval_outputs(params, "spacy", model_id, metrics)
+
 
 
 # ----------------- Éval sklearn -----------------
@@ -271,28 +305,113 @@ def eval_sklearn_model(params: Dict[str, Any], model_id: str) -> None:
 
 def eval_hf_model(params: Dict[str, Any], model_id: str) -> None:
     """
-    Squelette pour HuggingFace. Pour l'instant, on se contente d'un meta "non implémenté".
-    Quand tu seras prêt :
-      - charger le modèle depuis models/.../hf/model_id/
-      - tokenizer les texts de job.tsv
-      - faire un forward pass + argmax
-      - compute_basic_metrics(...)
+    Évaluation générique HuggingFace (famille 'hf').
+
+    - Charge le modèle et le tokenizer depuis models/{corpus}/{view}/hf/{model_id}
+    - Évalue sur job.tsv (ou fallback train.tsv)
+    - Utilise compute_basic_metrics pour produire metrics.json + meta_eval.json.
     """
+    try:
+        import torch
+        from torch.utils.data import Dataset, DataLoader
+        from transformers import AutoTokenizer, AutoModelForSequenceClassification
+    except ImportError:
+        print("[core_evaluate:hf] Transformers ou torch non installés. Skip HF.")
+        return
+
     model_dir = get_model_output_dir(params, "hf", model_id)
     if not model_dir.exists():
         print(f"[core_evaluate:hf] Modèle HF introuvable: {model_dir}, skip.")
         return
 
-    print(f"[core_evaluate:hf] TODO: évaluation HF pour le modèle '{model_id}' n'est pas encore implémentée.")
+    # Charger meta_model pour récupérer le mapping labels
+    meta_path = model_dir / "meta_model.json"
+    label2id = None
+    id2label = None
+    meta: Dict[str, Any] = {}
+    if meta_path.exists():
+        with meta_path.open("r", encoding="utf-8") as f:
+            meta = json.load(f)
+        extra = meta.get("extra", {})
+        label2id = extra.get("label2id")
+        id2label = extra.get("id2label")
 
-    # Placeholder : on écrit juste un meta_eval minimal
-    metrics: Dict[str, Any] = {
-        "family": "hf",
-        "model_id": model_id,
-        "n_eval_docs": 0,
-        "note": "Évaluation HF non implémentée en V4-v1.",
-    }
+    print(f"[core_evaluate:hf] Chargement modèle HF depuis {model_dir}")
+    if id2label is not None and label2id is not None and isinstance(id2label, dict):
+        # Normaliser les clés (str/int)
+        id2label_norm = {int(k): v for k, v in id2label.items()}
+        model = AutoModelForSequenceClassification.from_pretrained(
+            model_dir,
+            id2label=id2label_norm,
+        )
+    else:
+        model = AutoModelForSequenceClassification.from_pretrained(model_dir)
+
+    tokenizer = AutoTokenizer.from_pretrained(model_dir)
+
+    texts, labels_true = load_job_tsv(params)
+    texts, labels_true = maybe_debug_subsample_eval(texts, labels_true, params)
+
+    if not texts:
+        print("[core_evaluate:hf] Aucun document à évaluer.")
+        return
+
+    class HFEvalDataset(Dataset):
+        def __init__(self, texts: List[str], tokenizer, max_length: int):
+            self.texts = texts
+            self.tokenizer = tokenizer
+            self.max_length = max_length
+
+        def __len__(self) -> int:
+            return len(self.texts)
+
+        def __getitem__(self, idx: int):
+            enc = self.tokenizer(
+                self.texts[idx],
+                truncation=True,
+                padding="max_length",
+                max_length=self.max_length,
+            )
+            return {k: torch.tensor(v) for k, v in enc.items()}
+
+    # max_length : si présent dans meta_model.extra.trainer_params.max_length
+    max_length = 256
+    if meta:
+        extra = meta.get("extra", {})
+        max_length = int(extra.get("trainer_params", {}).get("max_length", max_length))
+
+    dataset = HFEvalDataset(texts, tokenizer, max_length)
+    loader = DataLoader(dataset, batch_size=32, shuffle=False)
+
+    model.eval()
+    preds_ids: List[int] = []
+
+    with torch.no_grad():
+        for batch in loader:
+            outputs = model(
+                input_ids=batch["input_ids"],
+                attention_mask=batch.get("attention_mask"),
+            )
+            logits = outputs.logits
+            batch_pred = torch.argmax(logits, dim=-1).tolist()
+            preds_ids.extend(batch_pred)
+
+    # Conversion ids -> labels
+    labels_pred: List[str]
+    if id2label and isinstance(id2label, dict):
+        id2label_int = {int(k): v for k, v in id2label.items()}
+        labels_pred = [id2label_int.get(pid, str(pid)) for pid in preds_ids]
+    else:
+        # Fallback : labels = str(id)
+        labels_pred = [str(pid) for pid in preds_ids]
+
+    metrics = compute_basic_metrics(labels_true, labels_pred)
+    metrics["family"] = "hf"
+    metrics["model_id"] = model_id
+    metrics["n_eval_docs"] = len(texts)
+
     save_eval_outputs(params, "hf", model_id, metrics)
+
 
 
 # ----------------- Éval "check" -----------------

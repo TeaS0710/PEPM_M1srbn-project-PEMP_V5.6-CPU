@@ -50,7 +50,7 @@ families:
 
     # Baseline déjà existante : TF-IDF + LinearSVC
     tfidf_svm_quick:
-      desc: "Baseline TFIDF + LinearSVC (SVM linéaire, rapide)"
+      desc: "TFIDF + LinearSVC, avec class weights issus du balance_strategy"
       vectorizer:
         class: "sklearn.feature_extraction.text.TfidfVectorizer"
         params:
@@ -61,7 +61,7 @@ families:
         class: "sklearn.svm.LinearSVC"
         params:
           C: 1.0
-          class_weight: "balanced"
+          class_weight: "from_balance"
           # n_jobs sera fixé à hardware.max_procs si None ou -1
           # LinearSVC n'a pas n_jobs, donc on laisse vide ici.
 
