@@ -14,18 +14,14 @@ train_prop: 0.8
 min_chars: 280
 max_tokens: 512
 
-tokenizer: "spacy_xx"
+tokenizer: split
 
-balance_strategy: "class_weights"
-balance_preset: "default_alpha_total"
+balance_strategy: "alpha_total"
+balance_preset: "uniform_small"
 
-families:
-  - "check"
-  - "spacy"
-  - "sklearn"
+families: ["spacy", "sklearn", "check"]
 
-models_spacy:
-  - "spacy_cnn_quick"
+models_spacy: ["spacy_cnn_quick", "spacy_bow_quick"]
 
 models_sklearn:
   - "tfidf_svm_quick"
@@ -35,3 +31,6 @@ models_hf: []
 hardware_preset: "small"
 
 debug_mode: false
+
+seed: 42          # ou null pour pas fixer la seed
+dedup_on: text

@@ -106,8 +106,7 @@ def load_label_map(path: str) -> Dict[str, str]:
 
 def resolve_profile_base(profile_name: str, overrides: Optional[List[str]] = None) -> Dict[str, Any]:
     """
-    Charger le profil + les YAML globaux (corpora, balance, hardware, models)
-    et renvoyer un gros dict 'params' prêt à consommer par core_prepare/train/evaluate.
+    Charge profil + YAML communs (corpora/balance/hardware/models) et construit 'params'.
     """
     if overrides is None:
         overrides = []
@@ -115,16 +114,15 @@ def resolve_profile_base(profile_name: str, overrides: Optional[List[str]] = Non
     profile_path = os.path.join("configs", "profiles", f"{profile_name}.yml")
     profile_cfg = load_yaml(profile_path)
 
-    corpora_cfg = load_yaml(os.path.join(COMMON_DIR, "corpora.yml"))
-    balance_cfg = load_yaml(os.path.join(COMMON_DIR, "balance.yml"))
+    corpora_cfg  = load_yaml(os.path.join(COMMON_DIR, "corpora.yml"))
+    balance_cfg  = load_yaml(os.path.join(COMMON_DIR, "balance.yml"))
     hardware_cfg = load_yaml(os.path.join(COMMON_DIR, "hardware.yml"))
-    models_cfg = load_yaml(os.path.join(COMMON_DIR, "models.yml"))
+    models_cfg   = load_yaml(os.path.join(COMMON_DIR, "models.yml"))
 
     corpus_id = profile_cfg.get("corpus_id")
     if corpus_id not in corpora_cfg:
         raise SystemExit(f"[config] corpus_id '{corpus_id}' non défini dans common/corpora.yml")
 
-    # Base params
     params: Dict[str, Any] = {
         "profile": profile_cfg.get("profile", profile_name),
         "description": profile_cfg.get("description", ""),
@@ -136,21 +134,20 @@ def resolve_profile_base(profile_name: str, overrides: Optional[List[str]] = Non
         "seed": profile_cfg.get("seed", 42),
     }
 
-    # Construire le preset hardware effectif
-    hardware_preset = profile_cfg.get("hardware_preset", "small")
+    # Hardware preset (une seule fois, sans doublon)
+    hardware_preset  = profile_cfg.get("hardware_preset", "small")
     hardware_presets = hardware_cfg.get("presets", {})
-    hardware = hardware_presets.get(hardware_preset, {})
     params["hardware_preset"] = hardware_preset
-    params["hardware"] = hardware
+    params["hardware"] = hardware_presets.get(hardware_preset, {})
 
-
-    # Copier les champs simples du profil
+    # Champs simples copiés depuis le profil
     simple_keys = [
         "corpus_id", "view", "modality",
         "label_field", "label_map",
         "train_prop", "min_chars", "max_tokens",
         "tokenizer", "seed",
-        "balance_strategy", "balance_preset",
+        "balance_strategy", "balance_preset", "balance_mode",
+        "dedup_on",
         "families",
         "models_spacy", "models_sklearn", "models_hf", "models_check",
         "hardware_preset", "debug_mode",
@@ -159,19 +156,65 @@ def resolve_profile_base(profile_name: str, overrides: Optional[List[str]] = Non
         if k in profile_cfg:
             params[k] = profile_cfg[k]
 
-    # Appliquer preset hardware
-    hardware_preset = profile_cfg.get("hardware_preset", "small")
-    hardware = hardware_cfg.get("presets", {}).get(hardware_preset, {})
-    hardware = hardware_presets.get(hardware_preset, {})
-    params["hardware_preset"] = hardware_preset
-    params["hardware"] = hardware
-
-
-    # Appliquer overrides CLI (sur params entiers)
+    # Overrides CLI au niveau 'params'
     params["pipeline_version"] = PIPELINE_VERSION
     params = apply_overrides(params, overrides)
 
+    # Alias de confort : balance_mode -> balance_strategy
+    bm = (params.get("balance_mode") or "").strip().lower()
+    if bm == "weights":
+        params["balance_strategy"] = "class_weights"
+    elif bm == "oversample":
+        params.setdefault("balance_strategy", "cap_docs")
+
     return params
+
+
+
+# --- Reproducibilité globale (optionnelle) ---
+
+def apply_global_seed(seed_val) -> bool:
+    """
+    Fixe la seed pour random/numpy/torch/spaCy si seed_val est un entier.
+    Si seed_val est None/'none'/'null' ou <0 -> on N'APPLIQUE PAS de seed (comportement optionnel).
+    Retourne True si une seed a été appliquée.
+    """
+    try:
+        if seed_val is None:
+            return False
+        if isinstance(seed_val, str) and seed_val.strip().lower() in {"none", "null", ""}:
+            return False
+        seed = int(seed_val)
+        if seed < 0:
+            return False
+    except Exception:
+        return False
+
+    import random
+    random.seed(seed)
+    try:
+        import numpy as np
+        np.random.seed(seed)
+    except Exception:
+        pass
+    try:
+        import torch
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    except Exception:
+        pass
+    try:
+        # spaCy >=3
+        import spacy.util as spacy_util
+        spacy_util.fix_random_seed(seed)
+    except Exception:
+        pass
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    return True
+
+
 
 
 def debug_print_params(params: Dict[str, Any]) -> None:

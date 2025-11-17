@@ -15,6 +15,7 @@ from scripts.core.core_utils import (
     resolve_profile_base,
     debug_print_params,
     PIPELINE_VERSION,
+    apply_global_seed,
 
 )
 
@@ -442,6 +443,9 @@ def eval_check_model(params: Dict[str, Any], model_id: str = "check_default") ->
 # ----------------- main -----------------
 
 
+# ----------------- main -----------------
+
+
 def main() -> None:
     args = parse_args()
     params = resolve_profile_base(args.profile, args.override)
@@ -449,7 +453,10 @@ def main() -> None:
     if args.verbose:
         debug_print_params(params)
 
-    random.seed(int(params.get("seed", 42)))  # un minimum de reproductibilité
+    # Seed globale optionnelle (comme dans core_train)
+    seed_applied = apply_global_seed(params.get("seed"))
+    print(f"[core_evaluate] Global seed: {'appliquée' if seed_applied else 'non appliquée'} ({params.get('seed')})")
+
     hw = params.get("hardware", {})
     blas_threads = hw.get("blas_threads", 1)
     set_blas_threads(blas_threads)
@@ -500,3 +507,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

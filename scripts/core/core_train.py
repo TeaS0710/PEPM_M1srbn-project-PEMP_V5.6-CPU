@@ -16,6 +16,7 @@ from scripts.core.core_utils import (
     resolve_profile_base,
     debug_print_params,
     PIPELINE_VERSION,
+    apply_global_seed,
 )
 
 
@@ -230,8 +231,8 @@ def train_spacy_model(params: Dict[str, Any], model_id: str) -> None:
         return
 
     # Localiser les DocBin train/dev (via formats meta ou répertoire connu)
-    corpus_id = params.get("corpus_id") or params["corpus"]["id"]
-    view = params.get("view") or params.get("profile_raw", {}).get("view")
+    corpus_id = params.get("corpus_id", params.get("corpus", {}).get("corpus_id"))
+    view = params.get("view", params.get("profile_raw", {}).get("view"))
     processed_dir = Path("data/processed") / str(corpus_id) / str(view)
     spacy_dir = processed_dir / "spacy"
 
@@ -317,6 +318,17 @@ def train_spacy_model(params: Dict[str, Any], model_id: str) -> None:
 
         # Entraînement via API spaCy (équivalent CLI)
         print(f"[core_train:spacy] Train {model_id} | epochs={cfg['training'].get('max_epochs')} | template={config_template}")
+
+        seed_val = params.get("seed")
+        try:
+            import spacy.util as spacy_util
+            if seed_val is not None and str(seed_val).lower() not in {"none", "null", ""} and int(seed_val) >= 0:
+                spacy_util.fix_random_seed(int(seed_val))
+                print(f"[core_train:spacy] Seed spaCy={int(seed_val)}")
+        except Exception:
+            pass
+
+
         spacy_train(cfg, output_path=model_dir, overrides={})
 
         # Meta modèle
@@ -341,6 +353,15 @@ def train_sklearn_model(params: Dict[str, Any], model_id: str) -> None:
 
     vect_params = dict(vect_cfg.get("params", {}))
     est_params = dict(est_cfg.get("params", {}))
+
+    # Permettre random_state=from_seed dans models.yml
+    rs = est_params.get("random_state")
+    if isinstance(rs, str) and rs == "from_seed":
+        try:
+            est_params["random_state"] = int(params.get("seed"))
+        except Exception:
+            est_params.pop("random_state", None)
+
 
     # Charger les données depuis train.tsv / job.tsv
     train_texts, train_labels, job_texts = load_tsv_dataset(params)
@@ -535,21 +556,38 @@ def train_hf_model(params: Dict[str, Any], model_id: str) -> None:
     warmup_ratio = float(trainer_params.get("warmup_ratio", 0.0))
     grad_accum = int(trainer_params.get("gradient_accumulation_steps", 1))
 
+    # -- seed optionnelle (None/"none"/"" ou <0 => pas de seed) --
+    seed_val = params.get("seed")
+    seed_int = None
+    if seed_val is not None:
+        try:
+            if isinstance(seed_val, str) and seed_val.strip().lower() in {"none", "null", ""}:
+                seed_int = None
+            else:
+                seed_int = int(seed_val)
+                if seed_int < 0:
+                    seed_int = None
+        except Exception:
+            seed_int = None
+
     training_args = TrainingArguments(
-        output_dir=str(output_dir),
-        learning_rate=learning_rate,
-        per_device_train_batch_size=train_batch_size,
-        per_device_train_batch_size=train_batch_size,
-        per_device_eval_batch_size=eval_batch_size,
-        num_train_epochs=num_train_epochs,
-        weight_decay=weight_decay,
-        warmup_ratio=warmup_ratio,
-        gradient_accumulation_steps=grad_accum,
-        evaluation_strategy="no",   # l'éval se fera dans core_evaluate.py
-        save_strategy="epoch",
-        logging_strategy="epoch",
-        load_best_model_at_end=False,
+        output_dir=str(model_dir),
+        num_train_epochs=trainer_params.get("num_train_epochs", 3),
+        per_device_train_batch_size=trainer_params.get("per_device_train_batch_size", 8),
+        per_device_eval_batch_size=trainer_params.get("per_device_eval_batch_size", 8),
+        gradient_accumulation_steps=trainer_params.get("gradient_accumulation_steps", 1),
+        learning_rate=trainer_params.get("learning_rate", 5e-5),
+        weight_decay=trainer_params.get("weight_decay", 0.0),
+        evaluation_strategy=trainer_params.get("evaluation_strategy", "no"),
+        save_strategy=trainer_params.get("save_strategy", "no"),
+        logging_steps=trainer_params.get("logging_steps", 50),
+        # on n'inclut seed/data_seed que si seed_int est valide
+        **({"seed": seed_int, "data_seed": seed_int} if seed_int is not None else {}),
     )
+
+
+
+
 
     # Trainer pondéré optionnel
     class WeightedTrainer(Trainer):
@@ -647,7 +685,8 @@ def main() -> None:
         debug_print_params(params)
 
     # Seed de base pour une reproductibilité minimaliste
-    random.seed(int(params.get("seed", 42)))
+    seed_applied = apply_global_seed(params.get("seed"))
+    print(f"[core_train] Global seed: {'appliquée' if seed_applied else 'non appliquée'} ({params.get('seed')})")
 
     hw = params.get("hardware", {})
     blas_threads = hw.get("blas_threads", 1)

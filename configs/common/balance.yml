@@ -28,3 +28,18 @@ strategies:
 
   class_weights:
     desc: "Ne modifie pas le corpus, mais calcule des poids par label (pour modèles compatibles)"
+
+  presets:
+    uniform_small:
+        # alpha_total "uniformise" si alpha=0.0 ;     total_docs limite l'effectif
+        strategy: alpha_total
+        alpha: 0.0
+        total_docs: 2000
+        offset: 0
+
+    capdocs_1k_oversample:
+        strategy: cap_docs
+        cap_per_label: 1000
+        oversample: true
+        offset: 0
+
