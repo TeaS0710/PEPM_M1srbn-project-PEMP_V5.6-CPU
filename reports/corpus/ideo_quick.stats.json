@@ -1,16 +1,16 @@
 {
-  "docs": 5,
+  "docs": 8115,
   "labels": 2,
   "dups_total": 0,
   "dups_per_label": {},
   "length_tokens": {
-    "right": {
-      "n": 2,
+    "far_right": {
+      "n": 8085,
       "median": 1.0,
       "p90": 1.0
     },
-    "far_right": {
-      "n": 3,
+    "right": {
+      "n": 30,
       "median": 1.0,
       "p90": 1.0
     }

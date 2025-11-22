@@ -4,6 +4,6 @@
   "view": "ideology_global",
   "family": "check",
   "model_id": "check_default",
-  "n_eval_docs": 1,
+  "n_eval_docs": 1623,
   "pipeline_version": "4.0.0-dev"
 }

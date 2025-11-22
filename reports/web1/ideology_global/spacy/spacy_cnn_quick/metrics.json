@@ -1,34 +1,34 @@
 {
-  "accuracy": 0.0,
-  "macro_f1": 0.0,
+  "accuracy": 0.9975354282193469,
+  "macro_f1": 0.9279499245316523,
   "classification_report": {
     "far_right": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1-score": 0.0,
-      "support": 0.0
+      "precision": 1.0,
+      "recall": 0.9975170701427685,
+      "f1-score": 0.9987569919204475,
+      "support": 1611.0
     },
     "right": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1-score": 0.0,
-      "support": 1.0
+      "precision": 0.75,
+      "recall": 1.0,
+      "f1-score": 0.8571428571428571,
+      "support": 12.0
     },
-    "accuracy": 0.0,
+    "accuracy": 0.9975354282193469,
     "macro avg": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1-score": 0.0,
-      "support": 1.0
+      "precision": 0.875,
+      "recall": 0.9987585350713842,
+      "f1-score": 0.9279499245316523,
+      "support": 1623.0
     },
     "weighted avg": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1-score": 0.0,
-      "support": 1.0
+      "precision": 0.9981515711645101,
+      "recall": 0.9975354282193469,
+      "f1-score": 0.9977099373195041,
+      "support": 1623.0
     }
   },
   "family": "spacy",
   "model_id": "spacy_cnn_quick",
-  "n_eval_docs": 1
+  "n_eval_docs": 1623
 }

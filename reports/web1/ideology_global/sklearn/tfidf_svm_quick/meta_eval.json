@@ -4,6 +4,6 @@
   "view": "ideology_global",
   "family": "sklearn",
   "model_id": "tfidf_svm_quick",
-  "n_eval_docs": 1,
+  "n_eval_docs": 1623,
   "pipeline_version": "4.0.0-dev"
 }

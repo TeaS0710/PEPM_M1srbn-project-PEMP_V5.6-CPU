@@ -1,34 +1,34 @@
 {
-  "accuracy": 0.0,
-  "macro_f1": 0.0,
+  "accuracy": 0.9926062846580407,
+  "macro_f1": 0.49814471243042674,
   "classification_report": {
     "far_right": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1-score": 0.0,
-      "support": 0.0
+      "precision": 0.9926062846580407,
+      "recall": 1.0,
+      "f1-score": 0.9962894248608535,
+      "support": 1611.0
     },
     "right": {
       "precision": 0.0,
       "recall": 0.0,
       "f1-score": 0.0,
-      "support": 1.0
+      "support": 12.0
     },
-    "accuracy": 0.0,
+    "accuracy": 0.9926062846580407,
     "macro avg": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1-score": 0.0,
-      "support": 1.0
+      "precision": 0.49630314232902034,
+      "recall": 0.5,
+      "f1-score": 0.49814471243042674,
+      "support": 1623.0
     },
     "weighted avg": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1-score": 0.0,
-      "support": 1.0
+      "precision": 0.9852672363426394,
+      "recall": 0.9926062846580407,
+      "f1-score": 0.988923144455228,
+      "support": 1623.0
     }
   },
   "family": "spacy",
   "model_id": "spacy_bow_quick",
-  "n_eval_docs": 1
+  "n_eval_docs": 1623
 }

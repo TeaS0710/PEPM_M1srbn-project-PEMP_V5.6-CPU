@@ -1,12 +1,14 @@
 {
   "family": "check",
   "model_id": "check_default",
-  "n_eval_docs": 1,
+  "n_eval_docs": 1623,
   "labels": [
+    "far_right",
     "right"
   ],
   "label_counts": {
-    "right": 1
+    "far_right": 1611,
+    "right": 12
   },
   "note": "Famille 'check' = pseudo-modèle, évaluation = stats brutes sur job.tsv"
 }

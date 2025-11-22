@@ -1,5 +1,5 @@
 corpus_id	view	family	model_id	profile	label_field	pipeline_version	n_eval_docs	accuracy	macro_f1	precision_macro	recall_macro
-web1	ideology_global	spacy	spacy_cnn_quick	ideo_quick		4.0.0-dev	1	0.0	0.0		
-web1	ideology_global	spacy	spacy_bow_quick	ideo_quick		4.0.0-dev	1	0.0	0.0		
-web1	ideology_global	check	check_default	ideo_quick		4.0.0-dev	1				
-web1	ideology_global	sklearn	tfidf_svm_quick	ideo_quick		4.0.0-dev	1	0.0	0.0		
+web1	ideology_global	spacy	spacy_cnn_quick	ideo_quick		4.0.0-dev	1623	0.9975354282193469	0.9279499245316523		
+web1	ideology_global	spacy	spacy_bow_quick	ideo_quick		4.0.0-dev	1623	0.9926062846580407	0.49814471243042674		
+web1	ideology_global	check	check_default	ideo_quick		4.0.0-dev	1623				
+web1	ideology_global	sklearn	tfidf_svm_quick	ideo_quick		4.0.0-dev	1623	0.9926062846580407	0.49814471243042674		
