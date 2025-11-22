@@ -320,7 +320,7 @@ Effet :
 * applique les filtres :
 
   * longueur minimale (`min_chars`),
-  * `max_tokens` (compte naïf de mots via `text.split()`),
+  * `max_tokens` (tokenizer configuré : `split`/`whitespace`, `simple`, `spacy:<lang>`),
   * modalité (`modality: "web"`),
   * mapping de labels via `label_map`,
 * applique la stratégie d’**équilibrage** (ici `alpha_total`),
