@@ -1,0 +1,18 @@
+# Mapping 5 classes : exgauche / gauche / centre / droite / exdroite
+mapping:
+  exgauche: far_left
+  far_left: far_left
+  gauche: left
+  gauche_moderee: left
+  left: left
+  centre: center
+  center: center
+  droite: right
+  droite_moderee: right
+  right: right
+  exdroite: far_right
+  far_right: far_right
+
+unknown_labels:
+  policy: drop
+  other_label: other

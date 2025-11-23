@@ -1,0 +1,16 @@
+# Mapping binaire gauche/droite basé sur l'annotation manuelle
+mapping:
+  gauche: left
+  gauche_moderee: left
+  exgauche: left
+  far_left: left
+  left: left
+  droite: right
+  droite_moderee: right
+  exdroite: right
+  far_right: right
+  right: right
+
+unknown_labels:
+  policy: drop
+  other_label: other

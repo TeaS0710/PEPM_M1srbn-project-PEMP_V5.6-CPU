@@ -20,10 +20,14 @@ import xml.etree.ElementTree as ET
 from scripts.core.core_utils import (
     resolve_profile_base,
     load_label_map,
+    load_yaml,
     debug_print_params,
     PIPELINE_VERSION,
     log,
 )
+
+# Cache des label_maps chargés (mapping + unknown_labels)
+_LABEL_MAP_CACHE: Dict[str, Dict[str, Any]] = {}
 
 
 # ----------------- CLI -----------------
@@ -225,6 +229,130 @@ def normalize_label_value(value: str) -> str:
     return norm.strip("_")
 
 
+def _load_label_map_cached(path: Optional[str]) -> Dict[str, Any]:
+    """Charger un label_map en normalisant les clés et en respectant unknown_labels."""
+    if not path:
+        return {"mapping": {}, "unknown_labels": {}}
+    if path in _LABEL_MAP_CACHE:
+        return _LABEL_MAP_CACHE[path]
+
+    raw = load_label_map(path)
+    norm_map = {normalize_label_value(str(k)): v for k, v in raw.items()}
+
+    unknown_cfg: Dict[str, Any] = {}
+    try:
+        full_raw = load_yaml(path)
+        if isinstance(full_raw, dict) and isinstance(full_raw.get("unknown_labels"), dict):
+            unknown_cfg = full_raw["unknown_labels"]
+    except Exception:
+        unknown_cfg = {}
+
+    _LABEL_MAP_CACHE[path] = {"mapping": norm_map, "unknown_labels": unknown_cfg}
+    return _LABEL_MAP_CACHE[path]
+
+
+def apply_label_mapping(
+    raw_value: str, mapping: Dict[str, str], unknown_cfg: Dict[str, Any]
+) -> Optional[str]:
+    """
+    Appliquer un mapping de labels en respectant une politique unknown_labels.
+
+    unknown_cfg.policy : drop (None), keep (valeur normalisée), other (other_label).
+    """
+
+    raw_norm = normalize_label_value(raw_value)
+    mapped = mapping.get(raw_norm)
+    if mapped:
+        return mapped
+
+    policy = str(unknown_cfg.get("policy", "drop")).strip().lower()
+    if policy == "keep":
+        return raw_norm
+    if policy == "other":
+        return str(unknown_cfg.get("other_label", "other"))
+    return None
+
+
+def first_non_empty(meta: Dict[str, Any], fields: Iterable[str]) -> Optional[str]:
+    for f in fields:
+        if f is None:
+            continue
+        val = meta.get(f)
+        if val is None:
+            continue
+        if isinstance(val, str):
+            if val.strip():
+                return val
+        else:
+            return str(val)
+    return None
+
+
+def stratified_split(
+    docs: List[Dict[str, Any]], train_prop: float, seed: int
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Découpage stratifié (par label) avant équilibrage."""
+
+    by_label: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for d in docs:
+        by_label[d["label"]].append(d)
+
+    rng = random.Random(seed)
+    train: List[Dict[str, Any]] = []
+    job: List[Dict[str, Any]] = []
+    for lab, bucket in by_label.items():
+        rng.shuffle(bucket)
+        n_total = len(bucket)
+        n_train = int(round(train_prop * n_total))
+        train.extend(bucket[:n_train])
+        job.extend(bucket[n_train:])
+
+    rng.shuffle(train)
+    rng.shuffle(job)
+    return train, job
+
+
+def resolve_ideology_label(
+    row_meta: Dict[str, Any], ideology_cfg: Dict[str, Any]
+) -> Tuple[Optional[str], Optional[str]]:
+    """Résoudre le label idéologique final selon la config structurée."""
+
+    source = str(ideology_cfg.get("label_source", "manual")).strip().lower()
+    granularity = str(ideology_cfg.get("granularity", "binary")).strip().lower()
+
+    manual_fields = ideology_cfg.get("label_fields_manual", ["ideology"])
+    derived_fields = ideology_cfg.get("label_fields_derived", ["domain", "crawl"])
+    fields = manual_fields if source == "manual" else derived_fields
+
+    raw_val = first_non_empty(row_meta, fields)
+    if raw_val is None:
+        return None, None
+
+    # label_map prioritaire selon granularité (intra_side peut spécifier son propre map)
+    label_map_path = ideology_cfg.get("label_map")
+    if granularity == "intra_side":
+        label_map_path = ideology_cfg.get("intra_side", {}).get("label_map", label_map_path)
+
+    lm_data = _load_label_map_cached(label_map_path)
+    label = apply_label_mapping(raw_val, lm_data.get("mapping", {}), ideology_cfg.get("unknown_labels", lm_data.get("unknown_labels", {})))
+
+    if label is None:
+        return raw_val, None
+
+    if granularity == "intra_side":
+        side_cfg = ideology_cfg.get("intra_side", {}) or {}
+        side = str(side_cfg.get("side", "")).strip().lower()
+        if side:
+            allowed_left = {"left", "gauche", "far_left", "exgauche"}
+            allowed_right = {"right", "droite", "far_right", "exdroite"}
+            if side == "left" and label not in allowed_left:
+                return raw_val, None
+            if side == "right" and label not in allowed_right:
+                return raw_val, None
+
+    return raw_val, label
+
+
 def extract_doc_id(elem: ET.Element, fallback_idx: int) -> str:
     """
     Essayer de récupérer un identifiant de document dans les attributs TEI,
@@ -317,11 +445,12 @@ def build_view(params: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
     # Priorité à label_fields (liste) si présent, sinon label_field (héritage)
     fields_for_labels = label_fields if label_fields is not None else label_field
     label_map_path = params.get("label_map")
-    label_map = None
-    if label_map_path:
-        raw_map = load_label_map(label_map_path)
-        # Normaliser les clés du mapping pour absorber les variantes d'écriture
-        label_map = {normalize_label_value(str(k)): v for k, v in raw_map.items()}
+    label_map_data = _load_label_map_cached(label_map_path)
+    label_map = label_map_data.get("mapping")
+    label_map_unknown_cfg = label_map_data.get("unknown_labels", {})
+
+    ideology_cfg = params.get("ideology") or {}
+    actors_cfg = params.get("actors") or {}
 
     modality_filter = params.get("modality")  # ex: "web", "asr", etc.
     train_prop = float(params.get("train_prop", 0.8))
@@ -342,6 +471,14 @@ def build_view(params: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
     docs: List[Dict[str, Any]] = []
     modality_counts = Counter()
     label_counts = Counter()
+
+    meta_fields: set = set()
+    if ideology_cfg:
+        meta_fields.update(ideology_cfg.get("label_fields_manual", []))
+        meta_fields.update(ideology_cfg.get("label_fields_derived", []))
+        meta_fields.update(ideology_cfg.get("intra_side", {}).get("label_fields", []) or [])
+    if actors_cfg:
+        meta_fields.add("actor")
 
     print(f"[core_prepare] Lecture TEI: {tei_path}")
     idx = 0
@@ -365,19 +502,27 @@ def build_view(params: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
         if modality_filter and doc_modality != modality_filter:
             continue
 
-        label_raw = extract_label_raw(elem, fields_for_labels)
-        if not label_raw:
-            continue
+        row_meta = {field: extract_term(elem, field) for field in meta_fields}
 
-        label_norm = normalize_label_value(label_raw)
-
-        if label_map:
-            mapped = label_map.get(label_norm)
+        label_raw: Optional[str] = None
+        label: Optional[str] = None
+        if ideology_cfg:
+            label_raw, label = resolve_ideology_label(row_meta, ideology_cfg)
+        else:
+            label_raw = extract_label_raw(elem, fields_for_labels)
+            if not label_raw:
+                continue
+            mapped = apply_label_mapping(
+                label_raw,
+                label_map or {},
+                label_map_unknown_cfg,
+            )
             if not mapped:
                 continue
             label = mapped
-        else:
-            label = label_norm
+
+        if not label:
+            continue
 
         label_counts[label] += 1
         docs.append(
@@ -388,6 +533,7 @@ def build_view(params: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
                 "text": text,
                 "modality": doc_modality,
                 "tokens": tokens,  # pour cap_tokens/stats/etc.
+                "meta": row_meta,
             }
         )
 
@@ -428,30 +574,54 @@ def build_view(params: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
     # Recompter après dedup
     label_counts = Counter(d["label"] for d in docs)
 
-    # Appliquer l'équilibrage via la config V4 (balance.yml + params)
-    docs_balanced, label_counts_balanced = apply_balance(
-        docs,
+    # Filtrage éventuel par acteurs
+    actor_counts_before = Counter()
+    actor_counts_after = Counter()
+    if actors_cfg:
+        include = set(actors_cfg.get("include") or [])
+        min_docs = int(actors_cfg.get("min_docs", 0) or 0)
+
+        for d in docs:
+            actor_counts_before[(d.get("meta") or {}).get("actor") or "unknown"] += 1
+
+        if include:
+            docs = [d for d in docs if (d.get("meta") or {}).get("actor") in include]
+
+        if min_docs > 0:
+            by_actor: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+            for d in docs:
+                by_actor[(d.get("meta") or {}).get("actor")].append(d)
+            docs = [doc for actor, bucket in by_actor.items() if len(bucket) >= min_docs for doc in bucket]
+
+        for d in docs:
+            actor_counts_after[(d.get("meta") or {}).get("actor") or "unknown"] += 1
+
+        if include or min_docs > 0:
+            print(
+                f"[core_prepare] Filtrage acteurs -> {len(actor_counts_after)} acteurs conservés, {len(docs)} docs"
+            )
+
+    # Split stratifié AVANT équilibrage
+    seed = int(params.get("seed", 42))
+    train_docs_raw, job_docs = stratified_split(docs, train_prop, seed)
+
+    label_counts_train_raw = Counter(d["label"] for d in train_docs_raw)
+    label_counts_job = Counter(d["label"] for d in job_docs)
+
+    # Appliquer l'équilibrage via la config V4 (balance.yml + params) uniquement sur train
+    train_docs, label_counts_balanced = apply_balance(
+        train_docs_raw,
         params,
-        label_counts,
+        label_counts_train_raw,
     )
 
     balance_strategy = params.get("balance_strategy", "none")
-    print(f"[core_prepare] Docs après équilibrage ({balance_strategy}): {len(docs_balanced)}")
-    print(f"[core_prepare] Répartition labels (après balance): {label_counts_balanced}")
+    print(f"[core_prepare] Docs après équilibrage train ({balance_strategy}): {len(train_docs)}")
+    print(f"[core_prepare] Répartition labels train (après balance): {label_counts_balanced}")
 
-    # Split train/job
-    seed = int(params.get("seed", 42))
-    random.Random(seed).shuffle(docs_balanced)
-    n_total = len(docs_balanced)
-    n_train = int(round(train_prop * n_total))
-    train_docs = docs_balanced[:n_train]
-    job_docs = docs_balanced[n_train:]
-
-
-
-    print(f"[core_prepare] Split train/job avec train_prop={train_prop}")
-    print(f"  -> train: {len(train_docs)} docs")
-    print(f"  -> job  : {len(job_docs)} docs")
+    print(f"[core_prepare] Split train/job stratifié avec train_prop={train_prop}")
+    print(f"  -> train (avant balance): {len(train_docs_raw)} docs | {label_counts_train_raw}")
+    print(f"  -> job  (naturel)      : {len(job_docs)} docs | {label_counts_job}")
 
     meta = {
         "profile": params.get("profile"),
@@ -461,6 +631,8 @@ def build_view(params: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
         "label_field": label_field,
         "label_fields": label_fields,
         "label_map": label_map_path,
+        "ideology_config": ideology_cfg,
+        "actors_filter": actors_cfg,
         "balance_strategy": balance_strategy,
         "balance_preset": balance_preset,
         "train_prop": train_prop,
@@ -468,15 +640,21 @@ def build_view(params: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
         "tokenizer": tokenizer_name,
         "dedup_on": dedup_on,
         "n_docs_raw": int(len(docs)),
-        "n_docs_balanced": int(len(docs_balanced)),
-        "n_docs_train": int(len(train_docs)),
+        "n_docs_train_raw": int(len(train_docs_raw)),
+        "n_docs_train_balanced": int(len(train_docs)),
         "n_docs_job": int(len(job_docs)),
         "label_counts_before": dict(label_counts),
-        "label_counts_after": dict(label_counts_balanced),
+        "label_counts_train_before_balance": dict(label_counts_train_raw),
+        "label_counts_train_after": dict(label_counts_balanced),
+        "label_counts_job": dict(label_counts_job),
         "modality_counts": dict(modality_counts),
         "params_hardware": params.get("hardware", {}),
         "pipeline_version": PIPELINE_VERSION,
     }
+    if actor_counts_before:
+        meta["actor_counts_before"] = dict(actor_counts_before)
+    if actor_counts_after:
+        meta["actor_counts_after"] = dict(actor_counts_after)
     if params.get("class_weights") is not None:
         meta["label_weights"] = params["class_weights"]
 

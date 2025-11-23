@@ -1,0 +1,11 @@
+# Mapping intra-camp gauche : conserve uniquement la gauche et l'extrême gauche
+mapping:
+  exgauche: exgauche
+  far_left: exgauche
+  gauche: gauche
+  gauche_moderee: gauche
+  left: gauche
+
+unknown_labels:
+  policy: drop
+  other_label: other

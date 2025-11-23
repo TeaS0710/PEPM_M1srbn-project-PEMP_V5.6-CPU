@@ -167,6 +167,56 @@ families:
           n_jobs: -1        # sera remplacé par hardware.max_procs
           random_state: 42
 
+    tfidf_randomforest_quick:
+      desc: "TFIDF + RandomForest (quick, CPU friendly)"
+      vectorizer:
+        class: "sklearn.feature_extraction.text.TfidfVectorizer"
+        params:
+          ngram_range: [1, 2]
+          max_features: 30000
+          min_df: 5
+      estimator:
+        class: "sklearn.ensemble.RandomForestClassifier"
+        params:
+          n_estimators: 120
+          max_depth: 40
+          min_samples_split: 5
+          min_samples_leaf: 2
+          class_weight: "balanced"
+          n_jobs: -1
+          random_state: 42
+
+    tfidf_decisiontree_quick:
+      desc: "TFIDF + DecisionTree (quick/debug)"
+      vectorizer:
+        class: "sklearn.feature_extraction.text.TfidfVectorizer"
+        params:
+          ngram_range: [1, 2]
+          max_features: 20000
+          min_df: 3
+      estimator:
+        class: "sklearn.tree.DecisionTreeClassifier"
+        params:
+          max_depth: 40
+          min_samples_split: 5
+          min_samples_leaf: 2
+          class_weight: "balanced"
+          random_state: 42
+
+    tfidf_smo_quick:
+      desc: "TFIDF + LinearSVC (SMO rapide)"
+      vectorizer:
+        class: "sklearn.feature_extraction.text.TfidfVectorizer"
+        params:
+          ngram_range: [1, 2]
+          max_features: 60000
+          min_df: 3
+      estimator:
+        class: "sklearn.svm.LinearSVC"
+        params:
+          C: 0.8
+          class_weight: "balanced"
+
 
   ###########################################################################
   # HF – Transformers (CamemBERT, FlauBERT, BERT)
@@ -202,6 +252,21 @@ families:
         warmup_ratio: 0.1
         gradient_accumulation_steps: 1
 
+    flaubert_quick:
+      desc: "FlauBERT base (quick run)"
+      model_name: "flaubert/flaubert_base_cased"
+      tokenizer_class: "transformers.AutoTokenizer"
+      model_class: "transformers.AutoModelForSequenceClassification"
+      use_class_weights: true
+      trainer_params:
+        learning_rate: 2e-5
+        per_device_train_batch_size: 8
+        per_device_eval_batch_size: 8
+        num_train_epochs: 2
+        weight_decay: 0.0
+        warmup_ratio: 0.0
+        gradient_accumulation_steps: 1
+
     bert_mbert_base:
       desc: "BERT multilingue (bert-base-multilingual-cased) classification (CPU)"
       model_name: "bert-base-multilingual-cased"
@@ -214,4 +279,19 @@ families:
         num_train_epochs: 3
         weight_decay: 0.01
         warmup_ratio: 0.1
+        gradient_accumulation_steps: 1
+
+    bert_mbert_quick:
+      desc: "BERT multilingue (quick)"
+      model_name: "bert-base-multilingual-cased"
+      tokenizer_class: "transformers.AutoTokenizer"
+      model_class: "transformers.AutoModelForSequenceClassification"
+      use_class_weights: true
+      trainer_params:
+        learning_rate: 3e-5
+        per_device_train_batch_size: 8
+        per_device_eval_batch_size: 8
+        num_train_epochs: 2
+        weight_decay: 0.0
+        warmup_ratio: 0.0
         gradient_accumulation_steps: 1

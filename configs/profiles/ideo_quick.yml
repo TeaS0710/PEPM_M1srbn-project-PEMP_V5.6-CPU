@@ -7,12 +7,24 @@ corpus_id: "web1"
 view: "ideology_global"
 modality: "web"
 
-label_field: "ideology"  # héritage (si présent dans le TEI)
-label_fields:
-  - "ideology"          # priorité : champ dédié si disponible
-  - "domain"            # fallback : domaine du site (présent dans le corpus actuel)
-  - "crawl"             # fallback legacy
-label_map: "configs/label_maps/ideology_global.yml"
+# Nouveau bloc idéologie (configurable via OVERRIDES)
+ideology:
+  granularity: binary         # binary | five_way | intra_side | derived
+  label_source: manual        # manual | derived
+  label_fields_manual: ["ideology"]
+  label_fields_derived: ["party", "ideology_total", "domain", "crawl"]
+  label_map: "configs/label_maps/ideology_binary.yml"
+  unknown_labels:
+    policy: drop
+    other_label: other
+  intra_side:
+    side: left                # utilisé si granularity=intra_side
+    label_map: "configs/label_maps/ideology_left_intra.yml"
+
+# Filtres optionnels sur les acteurs politiques
+actors:
+  include: []                 # liste blanche d'acteurs
+  min_docs: 0                 # seuil minimum de docs par acteur
 
 train_prop: 0.8
 min_chars: 280

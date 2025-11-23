@@ -151,6 +151,7 @@ def resolve_profile_base(profile_name: str, overrides: Optional[List[str]] = Non
         "models_spacy", "models_sklearn", "models_hf", "models_check",
         "balance_strategy", "balance_preset", "balance_mode",
         "hardware_preset", "debug_mode",
+        "ideology", "actors",
     ]
     for k in simple_keys:
         if k in profile_cfg:

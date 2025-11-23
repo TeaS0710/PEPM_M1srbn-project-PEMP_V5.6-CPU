@@ -1,0 +1,11 @@
+# Mapping intra-camp droite : conserve uniquement la droite et l'extrême droite
+mapping:
+  droite: droite
+  droite_moderee: droite
+  right: droite
+  exdroite: exdroite
+  far_right: exdroite
+
+unknown_labels:
+  policy: drop
+  other_label: other
