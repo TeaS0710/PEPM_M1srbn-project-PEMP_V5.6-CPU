@@ -1,28 +1,31 @@
-PYTHON			?=python3
+PYTHON                  ?=python3
 ifneq ("$(wildcard .venv/bin/python)","")
-PYTHON			:=.venv/bin/python
+PYTHON                  :=.venv/bin/python
 endif
 
-PROFILE			?=ideo_quick
+PROFILE                 ?= ideo_quick
 
-CORPUS_ID		?=web1
-VIEW			?=ideology_global
-TRAIN_PROP		?=
-BALANCE_STRATEGY	?=
-BALANCE_PRESET		?=
-HARDWARE_PRESET		?=
-FAMILIES		?=
-SEED			?=
-MAX_DOCS_SKLEARN	?=
-MAX_DOCS_SPACY		?=
+# Corpus / vue par défaut (overridables en ligne de commande)
+CORPUS_ID               ?= web1
+VIEW                    ?= ideology_global
 
-OVERRIDES		?=
+TRAIN_PROP              ?=
+BALANCE_STRATEGY        ?=
+BALANCE_PRESET          ?=
+HARDWARE_PRESET         ?=
+FAMILIES                ?=
+SEED                    ?=
+MAX_DOCS_SKLEARN        ?=
+MAX_DOCS_SPACY          ?=
 
-CORPUS_XML			?=data/raw/$(CORPUS_ID)/corpus.xml
-IDEO_MAP_OUT		?=configs/label_maps/ideology_actors.yml
-IDEO_REPORT_OUT		?=data/configs/actors_counts_$(CORPUS_ID).tsv
-MIN_CHARS_IDEO		?=200
-TOP_VARIANTS_IDEO	?=5
+OVERRIDES               ?=
+FAMILY                  ?=
+
+CORPUS_XML              ?= data/raw/$(CORPUS_ID)/corpus.xml
+IDEO_MAP_OUT            ?= configs/label_maps/ideology_actors.yml
+IDEO_REPORT_OUT         ?= data/configs/actors_counts_$(CORPUS_ID).tsv
+MIN_CHARS_IDEO          ?= 200
+TOP_VARIANTS_IDEO       ?= 5
 
 export PYTHONPATH	:=.
 
@@ -97,10 +100,10 @@ help:
 	@echo "  MAX_DOCS_SKLEARN -> max_train_docs_sklearn"
 	@echo "  MAX_DOCS_SPACY   -> max_train_docs_spacy"
 	@echo ""
-@echo "Overrides bruts :"
-@echo "  OVERRIDES        -> liste libre de \"cle=val\" (ex: OVERRIDES=\"debug_mode=true\")"
-@echo "  Exemples idéologie : OVERRIDES=\"ideology.granularity=five_way\""
-@echo "                     OVERRIDES=\"ideology.label_source=derived,actors.include=['ACTEUR']\""
+	@echo "Overrides bruts :"
+	@echo "  OVERRIDES        -> liste libre de \"cle=val\" (ex: OVERRIDES=\"debug_mode=true\")"
+	@echo "  Exemples idéologie : OVERRIDES=\"ideology.granularity=five_way\""
+	@echo "                     OVERRIDES=\"ideology.label_source=derived,actors.include=['ACTEUR']\""
 	@echo ""
 	@echo "Mise en place :"
 	@echo "  make setup                      # venv (si besoin) + install deps + arbo + check global"

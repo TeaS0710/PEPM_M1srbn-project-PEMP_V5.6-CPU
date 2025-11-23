@@ -15,8 +15,8 @@ Cette version combine la documentation de conception V4, les notes de patch et l
 flowchart TD
   A[Profil YAML + overrides] --> B(core_prepare.collect)
   B --> C{resolve labels}
-  C -->|ideology block| D[manual/derived lookup]\n+label_map + unknown policy
-  C -->|fallback legacy| E[label_fields + label_map]
+  C -->|ideology block| D[actors_yaml -> actor_id -> projection view]
+  C -->|fallback legacy| E[label_fields + label_map (deprecated)]
   D --> F[filters: actors, modality, min_chars/max_tokens]
   E --> F
   F --> G[stratified split train/job]
@@ -35,7 +35,7 @@ flowchart TD
 1. **core_prepare**
    - Charge le profil (`configs/profiles/{profile}.yml`), applique les presets communs (`corpora`, `hardware`, `balance`, `models`).
    - Extrait les docs TEI (`data/raw/{corpus_id}/corpus.xml`).
-   - Résout les labels (bloc `ideology` ou héritage `label_fields`) en appliquant la politique `unknown_labels`.
+   - Résout les labels (bloc `ideology` en mode `actors` par défaut, ou héritage `label_fields` en mode legacy) en appliquant la politique `unknown_labels`.
    - Filtre optionnellement par acteurs (`actors.include`, `actors.min_docs`), qualité (`min_chars`, `max_tokens`) et modality.
    - Réalise un **split stratifié** train/job, puis applique l'**équilibrage uniquement sur le train**.
    - Écrit `train.tsv`, `job.tsv`, `meta_view.json` sous `data/interim/{corpus_id}/{view}/`.
@@ -58,13 +58,11 @@ flowchart TD
 ## 2. Audit détaillé du prepare
 
 ### 2.1 Résolution de label idéologique
-- Bloc `ideology` dans les profils :
-  - `granularity` : `binary` (gauche/droite), `five_way`, `intra_side`, ou `derived`.
-  - `label_source` : `manual` (champs d'annotation) ou `derived` (crawl/domain/party).
-  - `label_fields_manual` / `label_fields_derived` : ordre de fallback pour trouver une valeur non vide.
-  - `label_map` : chemin YAML appliqué après normalisation ; `unknown_labels` gère `drop|keep|other`.
-  - `intra_side` : restreint à un camp (left/right) avec son propre label_map si besoin.
-- Compatibilité arrière : si le bloc `ideology` est absent, on retombe sur `label_fields` + `label_map` historiques.
+- Bloc `ideology` (mode par défaut `actors`) :
+  - `actors_yaml` : unique fichier de vérité `configs/label_maps/ideology_actors.yml` listant les acteurs et leurs projections (`side_binary`, `global_five`, `intra_left`, `intra_right`).
+  - `view` : `binary` | `five_way` | `left_intra` | `right_intra` (projection appliquée sur les valeurs de l'acteur).
+  - `unknown_actors` : `policy` (`drop`/`keep`) et label optionnel.
+- Compatibilité arrière : mode `legacy` conservé pour les anciens mappings (`label_fields` + `label_map`) mais les YAML associés sont archivés dans `configs/label_maps_legacy/` et non utilisés par les profils standards.
 
 ### 2.2 Filtrage et nettoyage
 - Filtres `min_chars`, `max_tokens`, `modality` appliqués avant split.
@@ -157,8 +155,9 @@ Notes d'implémentation :
 - `configs/common/corpora.yml` : chemins TEI, encodage, modality par défaut.
 - `configs/common/balance.yml` : stratégies et presets d'équilibrage.
 - `configs/common/models.yml` : catalogue des modèles par famille (spaCy, sklearn, HF, check).
-- `configs/common/hardware.yml` : presets RAM/CPU, shards spaCy, limites de docs.
-- `configs/label_maps/*.yml` : mappings d'idéologie (binaire, five_way, intra_left/right, global…).
+  - `configs/common/hardware.yml` : presets RAM/CPU, shards spaCy, limites de docs.
+  - `configs/label_maps/ideology_actors.yml` : unique fichier de vérité pour l'idéologie (projections binary/five_way/left_intra/right_intra).
+  - `configs/label_maps_legacy/*.yml` : anciens mappings conservés pour archive uniquement.
 - `configs/profiles/*.yml` : expérience complète (corpus, vue, filtres, stratégie d'équilibrage, famille active, bloc `ideology`).
 
 ### 4.2 Overrides & Makefile

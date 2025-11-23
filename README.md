@@ -26,15 +26,14 @@ Les variables Make principales : `PROFILE` (défaut `ideo_quick`), `OVERRIDES` (
 
 ### 2.1 Préparer une vue
 ```bash
-# Vue idéologie quick binaire (labels manuels)
+# Vue idéologie quick binaire (projection acteurs -> binaire)
 make prepare PROFILE=ideo_quick
 
-# Variante 5 classes
-make prepare PROFILE=ideo_quick OVERRIDES="ideology.granularity=five_way"
+# Variante 5 classes (projection acteurs -> five_way)
+make prepare PROFILE=ideo_quick OVERRIDES="ideology.view=five_way"
 
-# Intra-camp gauche avec filtre d'acteurs
-make prepare PROFILE=ideo_quick \
-  OVERRIDES='ideology.granularity=intra_side,ideology.intra_side.side=left,actors.include=["MELENCHON","JLM"],actors.min_docs=25'
+# Intra-camp gauche (projection acteurs -> intra gauche)
+make prepare PROFILE=ideo_quick OVERRIDES="ideology.view=left_intra"
 ```
 Sorties : `data/interim/{corpus}/{view}/train.tsv`, `job.tsv`, `meta_view.json`, `meta_formats.json`.
 
@@ -74,7 +73,8 @@ Rapports sous `reports/{corpus}/{view}/{family}/{model_id}/` (`metrics.json`, `c
   - `configs/common/balance.yml` (équilibrage),
   - `configs/common/models.yml` (catalogue de modèles),
   - `configs/common/hardware.yml` (presets CPU/sharding).
-- Label maps : `configs/label_maps/*.yml` (binaire, five_way, intra-camp, global).
+- Label maps : source unique `configs/label_maps/ideology_actors.yml` (projetée en `binary`, `five_way`, `left_intra`, `right_intra`).
+- Les anciens YAML idéologiques sont conservés uniquement pour archive dans `configs/label_maps_legacy/`.
 - Overrides CLI via `OVERRIDES="cle=val,cle2=val2"` pour modifier ponctuellement un profil.
 
 ## 4. Comprendre le pipeline
