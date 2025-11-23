@@ -5,7 +5,8 @@ endif
 
 PROFILE			?=ideo_quick
 
-CORPUS_ID		?=
+CORPUS_ID		?=web1
+VIEW			?=ideology_global
 TRAIN_PROP		?=
 BALANCE_STRATEGY	?=
 BALANCE_PRESET		?=
@@ -17,11 +18,9 @@ MAX_DOCS_SPACY		?=
 
 OVERRIDES		?=
 
-FAMILY			?=
-
-CORPUS_XML		?=data/raw/web1/corpus.xml
+CORPUS_XML			?=data/raw/$(CORPUS_ID)/corpus.xml
 IDEO_MAP_OUT		?=configs/label_maps/ideology_actors.yml
-IDEO_REPORT_OUT		?=data/configs/actors_counts_web1.tsv
+IDEO_REPORT_OUT		?=data/configs/actors_counts_$(CORPUS_ID).tsv
 MIN_CHARS_IDEO		?=200
 TOP_VARIANTS_IDEO	?=5
 
@@ -128,14 +127,14 @@ install: venv
 	$(PYTHON) -m pip install -r requirements.txt
 
 init_dirs:
-	mkdir -p data/raw/web1
-	mkdir -p data/interim/web1/ideology_global
-	mkdir -p data/processed/web1/ideology_global
-	mkdir -p models/web1/ideology_global
-	mkdir -p reports/web1/ideology_global
+	mkdir -p data/raw/$(CORPUS_ID)
+	mkdir -p data/interim/$(CORPUS_ID)/$(VIEW)
+	mkdir -p data/processed/$(CORPUS_ID)/$(VIEW)
+	mkdir -p models/$(CORPUS_ID)/$(VIEW)
+	mkdir -p reports/$(CORPUS_ID)/$(VIEW)
 	mkdir -p logs
-	@echo "[init_dirs] Arborescence de base créée."
-	@echo "  - Place ton corpus TEI dans: data/raw/web1/corpus.xml"
+	@echo "[init_dirs] Arborescence de base créée pour CORPUS_ID=$(CORPUS_ID), VIEW=$(VIEW)."
+	@echo "  - Place ton corpus TEI dans: data/raw/$(CORPUS_ID)/corpus.xml"
 
 setup: install init_dirs check
 	@echo "[setup] Terminé."

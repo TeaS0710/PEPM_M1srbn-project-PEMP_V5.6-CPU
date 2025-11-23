@@ -8,6 +8,7 @@ import random
 import re
 import sys
 from collections import Counter, defaultdict
+from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from pathlib import Path
 
@@ -24,10 +25,32 @@ from scripts.core.core_utils import (
     debug_print_params,
     PIPELINE_VERSION,
     log,
+    parse_seed,
 )
+import yaml
 
 # Cache des label_maps chargés (mapping + unknown_labels)
 _LABEL_MAP_CACHE: Dict[str, Dict[str, Any]] = {}
+
+
+@lru_cache(maxsize=1)
+def load_ideology_actors(path: str) -> Tuple[Dict[str, Any], Dict[str, str]]:
+    """Charger le mapping acteurs <- crawls depuis un YAML unique."""
+
+    if not path:
+        return {}, {}
+    with open(path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+
+    actors = data.get("actors")
+    if not isinstance(actors, dict):
+        actors = {}
+
+    crawl_to_actor: Dict[str, str] = {}
+    for actor_id, info in actors.items():
+        for crawl_id in (info or {}).get("crawls", []) or []:
+            crawl_to_actor[normalize_label_value(str(crawl_id))] = actor_id
+    return actors, crawl_to_actor
 
 
 # ----------------- CLI -----------------
@@ -314,9 +337,58 @@ def stratified_split(
 
 def resolve_ideology_label(
     row_meta: Dict[str, Any], ideology_cfg: Dict[str, Any]
-) -> Tuple[Optional[str], Optional[str]]:
+) -> Tuple[Optional[str], Optional[str], str]:
     """Résoudre le label idéologique final selon la config structurée."""
 
+    mode = str((ideology_cfg or {}).get("mode", "actors")).strip().lower()
+    if mode == "actors":
+        return resolve_ideology_label_actors(row_meta, ideology_cfg)
+    return resolve_ideology_label_legacy(row_meta, ideology_cfg)
+
+
+def resolve_ideology_label_actors(
+    row_meta: Dict[str, Any], ideology_cfg: Dict[str, Any]
+) -> Tuple[Optional[str], Optional[str], str]:
+    actors_yaml = ideology_cfg.get("actors_yaml")
+    actors_table, crawl_to_actor = load_ideology_actors(actors_yaml)
+
+    crawl_norm = normalize_label_value(str(row_meta.get("crawl") or ""))
+    actor_id = crawl_to_actor.get(crawl_norm)
+
+    if not actor_id:
+        policy = str(ideology_cfg.get("unknown_actors", {}).get("policy", "drop")).strip().lower()
+        if policy == "keep":
+            unknown_label = str(ideology_cfg.get("unknown_actors", {}).get("label", "unknown_actor"))
+            return None, unknown_label, "unknown_actor_kept"
+        return None, None, "unknown_actor_dropped"
+
+    view = ideology_cfg.get("view", "binary")
+    actor_info = actors_table.get(actor_id, {}) or {}
+    label = None
+
+    if view == "binary":
+        label = actor_info.get("side_binary")
+    elif view == "five_way":
+        label = actor_info.get("global_five")
+    elif view == "left_intra":
+        if actor_info.get("side_binary") != "left":
+            return actor_id, None, "actor_not_left"
+        label = actor_info.get("intra_left")
+    elif view == "right_intra":
+        if actor_info.get("side_binary") != "right":
+            return actor_id, None, "actor_not_right"
+        label = actor_info.get("intra_right")
+    else:
+        return actor_id, None, f"unknown_view_{view}"
+
+    if not label:
+        return actor_id, None, "label_missing_for_view"
+    return actor_id, str(label), "ok"
+
+
+def resolve_ideology_label_legacy(
+    row_meta: Dict[str, Any], ideology_cfg: Dict[str, Any]
+) -> Tuple[Optional[str], Optional[str], str]:
     source = str(ideology_cfg.get("label_source", "manual")).strip().lower()
     granularity = str(ideology_cfg.get("granularity", "binary")).strip().lower()
 
@@ -326,7 +398,7 @@ def resolve_ideology_label(
 
     raw_val = first_non_empty(row_meta, fields)
     if raw_val is None:
-        return None, None
+        return None, None, "no_label_raw"
 
     # label_map prioritaire selon granularité (intra_side peut spécifier son propre map)
     label_map_path = ideology_cfg.get("label_map")
@@ -334,10 +406,14 @@ def resolve_ideology_label(
         label_map_path = ideology_cfg.get("intra_side", {}).get("label_map", label_map_path)
 
     lm_data = _load_label_map_cached(label_map_path)
-    label = apply_label_mapping(raw_val, lm_data.get("mapping", {}), ideology_cfg.get("unknown_labels", lm_data.get("unknown_labels", {})))
+    label = apply_label_mapping(
+        raw_val,
+        lm_data.get("mapping", {}),
+        ideology_cfg.get("unknown_labels", lm_data.get("unknown_labels", {})),
+    )
 
     if label is None:
-        return raw_val, None
+        return raw_val, None, "label_not_mapped"
 
     if granularity == "intra_side":
         side_cfg = ideology_cfg.get("intra_side", {}) or {}
@@ -346,11 +422,11 @@ def resolve_ideology_label(
             allowed_left = {"left", "gauche", "far_left", "exgauche"}
             allowed_right = {"right", "droite", "far_right", "exdroite"}
             if side == "left" and label not in allowed_left:
-                return raw_val, None
+                return raw_val, None, "actor_not_left"
             if side == "right" and label not in allowed_right:
-                return raw_val, None
+                return raw_val, None, "actor_not_right"
 
-    return raw_val, label
+    return raw_val, label, "ok"
 
 
 def extract_doc_id(elem: ET.Element, fallback_idx: int) -> str:
@@ -477,11 +553,13 @@ def build_view(params: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
         meta_fields.update(ideology_cfg.get("label_fields_manual", []))
         meta_fields.update(ideology_cfg.get("label_fields_derived", []))
         meta_fields.update(ideology_cfg.get("intra_side", {}).get("label_fields", []) or [])
+        meta_fields.add("crawl")
     if actors_cfg:
         meta_fields.add("actor")
 
     print(f"[core_prepare] Lecture TEI: {tei_path}")
     idx = 0
+    ideology_stats: Counter = Counter()
     for elem in iter_tei_docs(tei_path):
         idx += 1
         doc_id = extract_doc_id(elem, idx)
@@ -507,7 +585,9 @@ def build_view(params: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
         label_raw: Optional[str] = None
         label: Optional[str] = None
         if ideology_cfg:
-            label_raw, label = resolve_ideology_label(row_meta, ideology_cfg)
+            label_raw, label, ideology_reason = resolve_ideology_label(row_meta, ideology_cfg)
+            if ideology_reason and ideology_reason != "ok":
+                ideology_stats[ideology_reason] += 1
         else:
             label_raw = extract_label_raw(elem, fields_for_labels)
             if not label_raw:
@@ -602,7 +682,7 @@ def build_view(params: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
             )
 
     # Split stratifié AVANT équilibrage
-    seed = int(params.get("seed", 42))
+    seed = parse_seed(params.get("seed"), default=42) or 42
     train_docs_raw, job_docs = stratified_split(docs, train_prop, seed)
 
     label_counts_train_raw = Counter(d["label"] for d in train_docs_raw)
@@ -639,6 +719,9 @@ def build_view(params: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
         "seed": seed,
         "tokenizer": tokenizer_name,
         "dedup_on": dedup_on,
+        "ideology_mode": (ideology_cfg or {}).get("mode"),
+        "ideology_view": (ideology_cfg or {}).get("view") or (ideology_cfg or {}).get("granularity"),
+        "ideology_stats": dict(ideology_stats),
         "n_docs_raw": int(len(docs)),
         "n_docs_train_raw": int(len(train_docs_raw)),
         "n_docs_train_balanced": int(len(train_docs)),
@@ -845,7 +928,7 @@ def apply_balance(
     """
     strategy = (params.get("balance_strategy") or "none").strip().lower()
     balance_cfg = params.get("balance_cfg", {}) or {}
-    seed = int(params.get("seed", 42))
+    seed = parse_seed(params.get("seed"), default=42) or 42
 
     # Chercher le preset de façon robuste :
     # 1) balance_cfg["strategies"][strategy]["presets"][balance_preset]

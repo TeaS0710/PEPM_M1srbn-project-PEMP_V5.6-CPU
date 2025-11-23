@@ -80,6 +80,28 @@ def apply_overrides(config: Dict[str, Any], overrides: List[str]) -> Dict[str, A
     return cfg
 
 
+def parse_seed(raw, default: Optional[int] = 42) -> Optional[int]:
+    """Convertir une seed potentielle en entier fiable.
+
+    Accepte None, "", "none", "null", nombres (int/str). Retourne `default`
+    en cas d'échec de conversion.
+    """
+    if raw is None:
+        return default
+    if isinstance(raw, str):
+        raw_str = raw.strip().lower()
+        if raw_str in {"", "none", "null"}:
+            return default
+        try:
+            return int(raw_str)
+        except Exception:
+            return default
+    try:
+        return int(raw)
+    except Exception:
+        return default
+
+
 # ---------- Label maps ----------
 
 def load_label_map(path: str) -> Dict[str, str]:
@@ -161,11 +183,31 @@ def resolve_profile_base(profile_name: str, overrides: Optional[List[str]] = Non
     hardware_preset  = profile_cfg.get("hardware_preset", "small")
     hardware_presets = hardware_cfg.get("presets", {})
     params["hardware_preset"] = hardware_preset
-    params["hardware"] = hardware_presets.get(hardware_preset, {})
+    params["hardware"] = deepcopy(hardware_presets.get(hardware_preset, {}))
 
     # Overrides CLI au niveau 'params'
     params["pipeline_version"] = PIPELINE_VERSION
     params = apply_overrides(params, overrides)
+
+    # Re-résoudre le corpus effectif après overrides
+    corpus_id_eff = params.get("corpus_id", profile_cfg.get("corpus_id"))
+    if corpus_id_eff not in corpora_cfg:
+        raise SystemExit(
+            f"[config] corpus_id '{corpus_id_eff}' non défini dans common/corpora.yml"
+        )
+    params["corpus_id"] = corpus_id_eff
+    params["corpus"] = corpora_cfg[corpus_id_eff]
+
+    # Re-résoudre le preset hardware après overrides
+    hardware_preset_eff = params.get("hardware_preset", profile_cfg.get("hardware_preset", "small"))
+    params["hardware_preset"] = hardware_preset_eff
+    params["hardware"] = deepcopy(hardware_presets.get(hardware_preset_eff, {}))
+
+    # Propager les limites max_docs top-level dans hardware
+    hw = params.setdefault("hardware", {}) or {}
+    for k in ("max_train_docs_sklearn", "max_train_docs_spacy", "max_train_docs_hf"):
+        if k in params and params[k] is not None:
+            hw[k] = params[k]
 
     # Alias convivial : balance_mode -> balance_strategy
     bm = (params.get("balance_mode") or "").strip().lower()
@@ -195,15 +237,8 @@ def apply_global_seed(seed_val) -> bool:
     Si seed_val ∈ {None, '', 'none', 'null'} ou <0 -> on n'applique PAS de seed.
     Retourne True si une seed a été appliquée.
     """
-    try:
-        if seed_val is None:
-            return False
-        if isinstance(seed_val, str) and seed_val.strip().lower() in {"none", "null", ""}:
-            return False
-        seed = int(seed_val)
-        if seed < 0:
-            return False
-    except Exception:
+    seed = parse_seed(seed_val, default=None)
+    if seed is None or seed < 0:
         return False
 
     import os, random
@@ -270,6 +305,11 @@ def debug_print_params(params: Dict[str, Any]) -> None:
     models_sklearn = profile_raw.get("models_sklearn") or params.get("models_sklearn", [])
     models_hf = profile_raw.get("models_hf") or params.get("models_hf", [])
 
+    def _join_or_str(val: Any) -> str:
+        if isinstance(val, str):
+            return val
+        return ", ".join(map(str, val)) if val else "-"
+
     t1 = Table(title="Corpus & Profil", expand=True)
     t1.add_column("Champ", style="bold", no_wrap=True)
     t1.add_column("Valeur")
@@ -288,10 +328,10 @@ def debug_print_params(params: Dict[str, Any]) -> None:
     t2.add_column("Famille", style="bold", no_wrap=True)
     t2.add_column("Valeur")
 
-    t2.add_row("Families", ", ".join(map(str, families)) or "-")
-    t2.add_row("spaCy", ", ".join(models_spacy) or "-")
-    t2.add_row("sklearn", ", ".join(models_sklearn) or "-")
-    t2.add_row("HF", ", ".join(models_hf) or "-")
+    t2.add_row("Families", _join_or_str(families))
+    t2.add_row("spaCy", _join_or_str(models_spacy))
+    t2.add_row("sklearn", _join_or_str(models_sklearn))
+    t2.add_row("HF", _join_or_str(models_hf))
     console.print()
     console.print(t2)
 

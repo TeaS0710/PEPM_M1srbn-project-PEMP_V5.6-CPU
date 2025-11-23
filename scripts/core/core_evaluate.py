@@ -22,6 +22,7 @@ from scripts.core.core_utils import (
     PIPELINE_VERSION,
     apply_global_seed,
     log,
+    parse_seed,
 
 )
 
@@ -139,7 +140,7 @@ def maybe_debug_subsample_eval(
     if len(texts) <= max_docs:
         return texts, labels
 
-    seed = int(params.get("seed", 42))
+    seed = parse_seed(params.get("seed"), default=42) or 42
     print(f"[core_evaluate] debug_mode actif : sous-échantillon de {max_docs} docs sur {len(texts)} (seed={seed})")
     indices = list(range(len(texts)))
     random.Random(seed).shuffle(indices)

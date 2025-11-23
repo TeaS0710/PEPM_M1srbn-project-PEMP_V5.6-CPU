@@ -23,6 +23,7 @@ from scripts.core.core_utils import (
     PIPELINE_VERSION,
     apply_global_seed,
     log,
+    parse_seed,
 )
 
 
@@ -180,7 +181,7 @@ def maybe_debug_subsample(
     if len(texts) <= max_docs:
         return texts, labels
 
-    seed = int(params.get("seed", 42))
+    seed = parse_seed(params.get("seed"), default=42) or 42
     print(f"[core_train] debug_mode actif : sous-échantillon de {max_docs} docs sur {len(texts)} (seed={seed})")
     indices = list(range(len(texts)))
     random.Random(seed).shuffle(indices)
@@ -433,10 +434,11 @@ def train_sklearn_model(params: Dict[str, Any], model_id: str) -> None:
     # Permettre random_state=from_seed dans models.yml
     rs = est_params.get("random_state")
     if isinstance(rs, str) and rs == "from_seed":
-        try:
-            est_params["random_state"] = int(params.get("seed"))
-        except Exception:
+        parsed_seed = parse_seed(params.get("seed"), default=None)
+        if parsed_seed is None:
             est_params.pop("random_state", None)
+        else:
+            est_params["random_state"] = parsed_seed
 
 
     # Charger les données depuis train.tsv / job.tsv
