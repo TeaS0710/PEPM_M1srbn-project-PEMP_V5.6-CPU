@@ -182,6 +182,52 @@ def group_indices_by_field(rows: List[Dict[str, Any]], field: str) -> Dict[Any, 
     return groups
 
 
+def compute_grouped_metrics(
+    rows: Optional[List[Dict[str, Any]]],
+    y_true: List[str],
+    y_pred: List[str],
+    fields: List[str],
+) -> Dict[str, Dict[Any, Dict[str, Any]]]:
+    if not rows or not fields:
+        return {}
+
+    if not (len(rows) == len(y_true) == len(y_pred)):
+        raise ValueError(
+            "[core_evaluate] Longueurs incohérentes pour le calcul des métriques groupées"
+        )
+
+    grouped: Dict[str, Dict[Any, Dict[str, Any]]] = {}
+    for field in fields:
+        groups = group_indices_by_field(rows, field)
+        metrics_by_field: Dict[Any, Dict[str, Any]] = {}
+        for val, idxs in groups.items():
+            y_true_g = [y_true[i] for i in idxs]
+            y_pred_g = [y_pred[i] for i in idxs]
+            metrics_by_field[val] = compute_basic_metrics(y_true_g, y_pred_g)
+        grouped[field] = metrics_by_field
+
+    return grouped
+
+
+def save_grouped_metrics(
+    params: Dict[str, Any],
+    family: str,
+    model_id: str,
+    grouped_metrics: Dict[str, Dict[Any, Dict[str, Any]]],
+) -> None:
+    if not grouped_metrics:
+        return
+
+    reports_dir = get_reports_dir(params, family, model_id)
+    ensure_dir(reports_dir)
+
+    for field, metrics_by in grouped_metrics.items():
+        path_group = reports_dir / f"metrics_by_{field}.json"
+        with path_group.open("w", encoding="utf-8") as f:
+            json.dump(metrics_by, f, ensure_ascii=False, indent=2)
+        print(f"[core_evaluate] metrics_by_{field}.json écrit : {path_group}")
+
+
 def save_eval_outputs(
     params: Dict[str, Any],
     family: str,
@@ -260,6 +306,8 @@ def eval_spacy_model(params: Dict[str, Any], model_id: str) -> None:
     # Chercher tous les DocBin "job*.spacy" (shardés ou non)
     job_docbins = sorted(spacy_proc_dir.glob("job*.spacy"))
 
+    rows: Optional[List[Dict[str, Any]]] = None
+
     if job_docbins:
         print(f"[core_evaluate:spacy] Utilisation de {len(job_docbins)} DocBin job*.spacy dans {spacy_proc_dir}")
         job_docs = []
@@ -279,13 +327,25 @@ def eval_spacy_model(params: Dict[str, Any], model_id: str) -> None:
                 labels_true.append(best_label)
 
         # Sous-échantillon éventuel en debug_mode
-        texts, labels_true = maybe_debug_subsample_eval(texts, labels_true, params)
+        try:
+            _texts_tsv, _labels_tsv, rows_loaded = load_job_tsv(params)
+            if len(rows_loaded) == len(texts):
+                rows = rows_loaded
+            else:
+                print(
+                    "[core_evaluate:spacy] WARNING: Longueur job.tsv différente des DocBin,"
+                    " metrics_by ignorées."
+                )
+        except SystemExit:
+            print("[core_evaluate:spacy] WARNING: job.tsv introuvable pour comparer par champ.")
+
+        texts, labels_true, rows = maybe_debug_subsample_eval(texts, labels_true, params, rows)
 
     else:
         # ---- Fallback TSV (flux V2) ----
         print("[core_evaluate:spacy] Aucun DocBin job*.spacy trouvé, fallback sur job.tsv")
         texts, labels_true, rows = load_job_tsv(params)
-        texts, labels_true, _rows = maybe_debug_subsample_eval(texts, labels_true, params, rows)
+        texts, labels_true, rows = maybe_debug_subsample_eval(texts, labels_true, params, rows)
 
     print(f"[core_evaluate:spacy] Évaluation sur {len(texts)} docs.")
     labels_pred: List[str] = []
@@ -304,7 +364,17 @@ def eval_spacy_model(params: Dict[str, Any], model_id: str) -> None:
     metrics["model_id"] = model_id
     metrics["n_eval_docs"] = len(texts)
 
+    analysis_cfg = params.get("analysis") or {}
+    compare_by = analysis_cfg.get("compare_by") or []
+
+    try:
+        grouped_metrics = compute_grouped_metrics(rows, labels_true, labels_pred, compare_by)
+    except ValueError as e:
+        print(str(e))
+        grouped_metrics = {}
+
     save_eval_outputs(params, "spacy", model_id, metrics)
+    save_grouped_metrics(params, "spacy", model_id, grouped_metrics)
 
 
 
@@ -339,22 +409,10 @@ def eval_sklearn_model(params: Dict[str, Any], model_id: str) -> None:
     metrics["n_eval_docs"] = len(texts)
     metrics["n_features"] = int(getattr(X, "shape", (0, 0))[1])
 
+    grouped_metrics = compute_grouped_metrics(rows, labels_true, list(labels_pred), compare_by)
+
     save_eval_outputs(params, "sklearn", model_id, metrics)
-
-    for field in compare_by:
-        groups = group_indices_by_field(rows, field)
-        metrics_by_field: Dict[Any, Any] = {}
-        for val, idxs in groups.items():
-            y_true_g = [labels_true[i] for i in idxs]
-            y_pred_g = [labels_pred[i] for i in idxs]
-            metrics_by_field[val] = compute_basic_metrics(y_true_g, y_pred_g)
-
-        reports_dir = get_reports_dir(params, "sklearn", model_id)
-        ensure_dir(reports_dir)
-        path_group = reports_dir / f"metrics_by_{field}.json"
-        with path_group.open("w", encoding="utf-8") as f:
-            json.dump(metrics_by_field, f, ensure_ascii=False, indent=2)
-        print(f"[core_evaluate] metrics_by_{field}.json écrit : {path_group}")
+    save_grouped_metrics(params, "sklearn", model_id, grouped_metrics)
 
 
 #  Éval HF (squelette)
@@ -470,22 +528,10 @@ def eval_hf_model(params: Dict[str, Any], model_id: str) -> None:
     metrics["model_id"] = model_id
     metrics["n_eval_docs"] = len(texts)
 
+    grouped_metrics = compute_grouped_metrics(rows, labels_true, labels_pred, compare_by)
+
     save_eval_outputs(params, "hf", model_id, metrics)
-
-    for field in compare_by:
-        groups = group_indices_by_field(rows, field)
-        metrics_by_field: Dict[Any, Any] = {}
-        for val, idxs in groups.items():
-            y_true_g = [labels_true[i] for i in idxs]
-            y_pred_g = [labels_pred[i] for i in idxs]
-            metrics_by_field[val] = compute_basic_metrics(y_true_g, y_pred_g)
-
-        reports_dir = get_reports_dir(params, "hf", model_id)
-        ensure_dir(reports_dir)
-        path_group = reports_dir / f"metrics_by_{field}.json"
-        with path_group.open("w", encoding="utf-8") as f:
-            json.dump(metrics_by_field, f, ensure_ascii=False, indent=2)
-        print(f"[core_evaluate] metrics_by_{field}.json écrit : {path_group}")
+    save_grouped_metrics(params, "hf", model_id, grouped_metrics)
 
 
 
