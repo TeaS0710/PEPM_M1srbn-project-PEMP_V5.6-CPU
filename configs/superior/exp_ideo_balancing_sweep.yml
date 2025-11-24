@@ -1,0 +1,88 @@
+exp_id: ideo_balancing_sweep
+description: >
+  Étude de l'impact des stratégies d'équilibrage
+  sur web1 et web1+asr1, avec ideo_quick.
+
+base:
+  profile: ideo_quick
+  stage: pipeline
+  fixed:
+    CORPUS_ID: web1
+    HARDWARE_PRESET: small
+    TRAIN_PROP: 0.8
+  overrides:
+    ideology.view: global_five
+
+axes:
+  - name: dataset
+    type: choice
+    values:
+      - label: web1_only
+        overrides:
+          data.corpus_ids: [web1]
+          data.merge_mode: single
+      - label: web1_asr1_juxt
+        overrides:
+          data.corpus_ids: [web1, asr1]
+          data.merge_mode: juxtaposed
+          analysis.compare_by: [corpus_id]
+
+  - name: balance_strategy
+    type: choice
+    values:
+      - label: no_balance
+        make_vars:
+          BALANCE_STRATEGY: none
+      - label: oversample_parity
+        make_vars:
+          BALANCE_STRATEGY: oversample
+          BALANCE_PRESET: parity
+
+  - name: family_model
+    type: choice
+    values:
+      - label: sklearn_svm
+        make_vars:
+          FAMILY: sklearn
+        overrides:
+          families: [sklearn]
+          models_sklearn: [tfidf_svm_quick]
+          hardware.max_train_docs_sklearn: 100000
+
+      - label: spacy_cnn
+        make_vars:
+          FAMILY: spacy
+        overrides:
+          families: [spacy]
+          models_spacy: [spacy_cnn_quick]
+          hardware.max_train_docs_spacy: 20000
+
+grid:
+  mode: cartesian
+
+run:
+  repeats: 1
+  seed_strategy: per_run   # fixed | per_run
+  base_seed: 42
+
+scheduler:
+  parallel: 1
+  max_ram_gb: 14
+  resource_classes:
+    spacy: heavy
+    sklearn: light
+    hf: heavy
+  weights:
+    light: 1
+    medium: 2
+    heavy: 4
+  max_weight: 4
+
+analysis_hooks:
+  after_experiment:
+    - type: curves
+      metrics: [accuracy, macro_f1]
+      x_axis: TRAIN_PROP
+      group_by: [family, dataset_id]
+    - type: report_markdown
+      path: superior/${exp_id}/report.md
