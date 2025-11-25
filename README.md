@@ -17,6 +17,13 @@ Objectif : pouvoir lancer, rejouer et comparer des expériences complètes (pré
 Version : **V5.5 – CPU** (multi-corpus + orchestrateur `superior` + gestion RAM soft/hard).
 
 ---
+### Credit pour ce projet :
+*je souhaite poser un petit mot de remerciement pour les personnes qui m'ont aidé, et relu mon travail lors de ce projet, je cite :*
+- Enzo Julien
+- Camille Monnot (XD)
+- Marco Faciolo
+
+---
 
 ## 1. Vue d’ensemble
 
