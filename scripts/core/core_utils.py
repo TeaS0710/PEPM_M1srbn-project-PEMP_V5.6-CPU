@@ -3,6 +3,8 @@
 import argparse
 import os
 import sys
+import ast
+import re
 from copy import deepcopy
 from typing import Any, Dict, List, Optional
 import pprint as _pprint
@@ -53,6 +55,56 @@ def parse_override(raw: str) -> (List[str], Any):
     path = key.split(".")
     return path, value
 
+_LIST_PATTERN = re.compile(r"^\[(.*)\]$")
+
+def _cast_override_value(value: Any) -> Any:
+    """
+    Cast d'une valeur d'override venant de la CLI.
+
+    Gère :
+    - booléens ("true"/"false"),
+    - ints, floats,
+    - littéraux Python/JSON simples (via ast.literal_eval),
+    - listes de la forme [web1,asr1] → ["web1","asr1"].
+    """
+    if not isinstance(value, str):
+        return value
+
+    s = value.strip()
+
+    # booléens
+    if s.lower() in ("true", "false"):
+        return s.lower() == "true"
+
+    # int
+    try:
+        return int(s)
+    except (ValueError, TypeError):
+        pass
+
+    # float
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        pass
+
+    # Essai de littéral Python (ça gère déjà '["web1","asr1"]', '{"a": 1}', etc.)
+    try:
+        return ast.literal_eval(s)
+    except Exception:
+        pass
+
+    # Cas spécial: liste non quotée [web1,asr1] ou [corpus_id]
+    m = _LIST_PATTERN.match(s)
+    if m:
+        inner = m.group(1)
+        elems = [e.strip() for e in inner.split(",") if e.strip()]
+        # On retourne une liste de strings brutes (web1, asr1, corpus_id, ...)
+        return elems
+
+    # Fallback: string brute
+    return s
+
 
 def apply_overrides(config: Dict[str, Any], overrides: List[str]) -> Dict[str, Any]:
     """Appliquer une liste de 'key=value' sur un dict (nested)."""
@@ -60,16 +112,7 @@ def apply_overrides(config: Dict[str, Any], overrides: List[str]) -> Dict[str, A
     for raw in overrides:
         path, value = parse_override(raw)
         # Tentative de cast simple
-        if isinstance(value, str) and value.lower() in ("true", "false"):
-            cast_val: Any = value.lower() == "true"
-        else:
-            try:
-                cast_val = int(value)
-            except (ValueError, TypeError):
-                try:
-                    cast_val = float(value)
-                except (ValueError, TypeError):
-                    cast_val = value
+        cast_val = _cast_override_value(value)
 
         d: Dict[str, Any] = cfg
         for key in path[:-1]:

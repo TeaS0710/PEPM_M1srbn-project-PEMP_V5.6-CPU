@@ -132,9 +132,18 @@ def _merge_dicts(dicts: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def _format_override_value(value: Any) -> str:
+    """
+    Sérialise une valeur d'override pour la ligne de commande.
+
+    - Pour les dict/list, on utilise un JSON compact (sans espaces après les virgules)
+      afin d'éviter que `make` / le shell ne découpent l'override en plusieurs tokens.
+    """
     if isinstance(value, (dict, list)):
-        return json.dumps(value)
+        # JSON compact: '["web1","asr1"]'
+        # → après passage shell: [web1,asr1] (sans guillemets, mais une seule "word")
+        return json.dumps(value, separators=(",", ":"))
     return str(value)
+
 
 
 def _resource_class_for(make_vars: Dict[str, str], scheduler: SchedulerConfig) -> str:
@@ -892,6 +901,17 @@ def orchestrate(
                     break
 
             pending_runs.pop(0)
+
+            # LOG VERBEUX LANCEMENT D'UN RUN
+            family = next_run.make_vars.get("FAMILY", "")
+            model = next_run.make_vars.get("MODEL_ID", "")
+            print(
+                f"[superior] Launching {next_run.run_id} "
+                f"(stage={next_run.stage}, profile={next_run.profile}, "
+                f"axes={next_run.axis_values}, FAMILY={family}, MODEL={model})"
+            )
+
+
             proc = _launch_run(next_run, logs_dir, exp_config.safety)
             active[next_run.run_id] = proc
             start_times[next_run.run_id] = time.time()
