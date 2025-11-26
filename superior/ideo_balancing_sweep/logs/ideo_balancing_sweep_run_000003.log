@@ -1,8 +1,7 @@
 [run_single] exp_id=ideo_balancing_sweep run_id=ideo_balancing_sweep_run_000003
-[run_single] CMD: make run STAGE=pipeline PROFILE=ideo_quick BALANCE_STRATEGY=oversample BALANCE_PRESET=parity FAMILY=spacy SEED=45 OVERRIDES=view=ideology_global max_docs_global=1500 dataset_id=web1 data.corpus_ids=["web1"] data.merge_mode=single analysis.compare_by=[] families=["spacy"] models_spacy=["spacy_cnn_quick"]
-make[1]: Entering directory '/home/teas/prog/PEPM_M1srbn-project-PEMP_V5.5-CPU-main'
+[run_single] CMD: make run STAGE=pipeline PROFILE=ideo_quick HARDWARE_PRESET=small TRAIN_PROP=0.8 MAX_DOCS_SKLEARN=100 MAX_DOCS_SPACY=100 MAX_DOCS_HF=20 BALANCE_STRATEGY=oversample BALANCE_PRESET=parity FAMILY=spacy SEED=45 OVERRIDES=view=ideology_global max_docs_global=1500 dataset_id=web1 data.corpus_ids=["web1"] data.merge_mode=single analysis.compare_by=[] families=["spacy"] models_spacy=["spacy_cnn_quick"]
 [run] STAGE=pipeline PROFILE=ideo_quick FAMILY=spacy
-make[2]: Entering directory '/home/teas/prog/PEPM_M1srbn-project-PEMP_V5.5-CPU-main'
+make[1]: Entering directory '/media/teas/disque_B1/PEPM_M1srbn-project-PEMP_V5.5-CPU-main'
 .venv/bin/python scripts/pre/pre_check_env.py --profile ideo_quick || true
 [env] Profil cible (info): ideo_quick
 [env] Vérification des imports critiques...
@@ -18,10 +17,310 @@ make[2]: Entering directory '/home/teas/prog/PEPM_M1srbn-project-PEMP_V5.5-CPU-m
 [check] Vérification du profil ideo_quick...
 .venv/bin/python scripts/pre/pre_check_config.py \
 --profile ideo_quick \
---override corpus_id=web1 --override balance_strategy=oversample --override balance_preset=parity --override seed=45 --override view=ideology_global --override max_docs_global=1500 --override dataset_id=web1 --override data.corpus_ids=[web1] --override data.merge_mode=single --override analysis.compare_by=[] --override families=[spacy] --override models_spacy=[spacy_cnn_quick] \
+--override corpus_id=web1 --override train_prop=0.8 --override balance_strategy=oversample --override balance_preset=parity --override hardware_preset=small --override seed=45 --override max_train_docs_sklearn=100 --override max_train_docs_spacy=100 --override max_train_docs_hf=20 --override view=ideology_global --override max_docs_global=1500 --override dataset_id=web1 --override data.corpus_ids=[web1] --override data.merge_mode=single --override analysis.compare_by=[] --override families=[spacy] --override models_spacy=[spacy_cnn_quick] \
 --verbose
-[config] corpus_ids inconnus dans common/corpora.yml: ['[', 'w', 'e', 'b', '1', ']']
-make[2]: *** [makefile:159: check] Error 1
-make[2]: Leaving directory '/home/teas/prog/PEPM_M1srbn-project-PEMP_V5.5-CPU-main'
-make[1]: *** [makefile:211: run] Error 2
-make[1]: Leaving directory '/home/teas/prog/PEPM_M1srbn-project-PEMP_V5.5-CPU-main'
+[config] WARNING: label_map non défini dans le profil
+
+╭─────────────────────────────────────── CONFIG ────────────────────────────────────────╮
+│ Pipeline V4                                                                           │
+│ profile=ideo_quick                                                                    │
+│ version=4.0.0-dev                                                                     │
+│ Vue idéologie globale – run complet mais raisonnable (tous les modèles spaCy+sklearn) │
+╰─────────────────────────────────── params résolus ────────────────────────────────────╯
+
+                                           Corpus & Profil                                           
+┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ       ┃ Valeur                                                                              ┃
+┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Profil      │ ideo_quick                                                                          │
+│ Desc        │ Vue idéologie globale – run complet mais raisonnable (tous les modèles              │
+│             │ spaCy+sklearn)                                                                      │
+│ Corpus id   │ web1                                                                                │
+│ Corpus path │ data/raw/web1/corpus.xml                                                            │
+│ View        │ ideology_global                                                                     │
+│ Modality    │ None                                                                                │
+│ Label field │ ideology_label                                                                      │
+└─────────────┴─────────────────────────────────────────────────────────────────────────────────────┘
+
+                                         Familles & Modèles                                          
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Famille  ┃ Valeur                                                                                 ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Families │ check, spacy, sklearn                                                                  │
+│ spaCy    │ spacy_cnn_quick, spacy_bow_quick                                                       │
+│ sklearn  │ tfidf_svm_quick, tfidf_smo_linear, tfidf_smo_rbf, tfidf_perceptron, tfidf_randomtree,  │
+│          │ tfidf_randomforest                                                                     │
+│ HF       │ -                                                                                      │
+└──────────┴────────────────────────────────────────────────────────────────────────────────────────┘
+
+                                         Balance & Hardware                                          
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ                                                     ┃ Valeur                                ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Balance strategy                                          │ oversample                            │
+│ Balance preset                                            │ parity                                │
+│ HW preset                                                 │ small                                 │
+│ RAM (GB)                                                  │ 8                                     │
+│ Max procs                                                 │ 2                                     │
+│ TSV chunk rows                                            │ 20000                                 │
+│ spaCy shard docs                                          │ 10000                                 │
+└───────────────────────────────────────────────────────────┴───────────────────────────────────────┘
+
+                                           Train & Divers                                            
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ                                                     ┃ Valeur                                ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Train prop                                                │ 0.8                                   │
+│ Min chars                                                 │ 200                                   │
+│ Max tokens                                                │ 512                                   │
+│ Tokenizer                                                 │ None                                  │
+│ Seed                                                      │ 45                                    │
+│ Debug mode                                                │ False                                 │
+└───────────────────────────────────────────────────────────┴───────────────────────────────────────┘
+
+[OK] Profil 'ideo_quick' validé.
+[check] OK : environnement + scripts + profil ideo_quick validés.
+[prepare] Profil: ideo_quick
+.venv/bin/python scripts/core/core_prepare.py \
+--profile ideo_quick \
+--override corpus_id=web1 --override train_prop=0.8 --override balance_strategy=oversample --override balance_preset=parity --override hardware_preset=small --override seed=45 --override max_train_docs_sklearn=100 --override max_train_docs_spacy=100 --override max_train_docs_hf=20 --override view=ideology_global --override max_docs_global=1500 --override dataset_id=web1 --override data.corpus_ids=[web1] --override data.merge_mode=single --override analysis.compare_by=[] --override families=[spacy] --override models_spacy=[spacy_cnn_quick] \
+--verbose
+
+╭─────────────────────────────────────── CONFIG ────────────────────────────────────────╮
+│ Pipeline V4                                                                           │
+│ profile=ideo_quick                                                                    │
+│ version=4.0.0-dev                                                                     │
+│ Vue idéologie globale – run complet mais raisonnable (tous les modèles spaCy+sklearn) │
+╰─────────────────────────────────── params résolus ────────────────────────────────────╯
+
+                                           Corpus & Profil                                           
+┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ       ┃ Valeur                                                                              ┃
+┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Profil      │ ideo_quick                                                                          │
+│ Desc        │ Vue idéologie globale – run complet mais raisonnable (tous les modèles              │
+│             │ spaCy+sklearn)                                                                      │
+│ Corpus id   │ web1                                                                                │
+│ Corpus path │ data/raw/web1/corpus.xml                                                            │
+│ View        │ ideology_global                                                                     │
+│ Modality    │ None                                                                                │
+│ Label field │ ideology_label                                                                      │
+└─────────────┴─────────────────────────────────────────────────────────────────────────────────────┘
+
+                                         Familles & Modèles                                          
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Famille  ┃ Valeur                                                                                 ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Families │ check, spacy, sklearn                                                                  │
+│ spaCy    │ spacy_cnn_quick, spacy_bow_quick                                                       │
+│ sklearn  │ tfidf_svm_quick, tfidf_smo_linear, tfidf_smo_rbf, tfidf_perceptron, tfidf_randomtree,  │
+│          │ tfidf_randomforest                                                                     │
+│ HF       │ -                                                                                      │
+└──────────┴────────────────────────────────────────────────────────────────────────────────────────┘
+
+                                         Balance & Hardware                                          
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ                                                     ┃ Valeur                                ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Balance strategy                                          │ oversample                            │
+│ Balance preset                                            │ parity                                │
+│ HW preset                                                 │ small                                 │
+│ RAM (GB)                                                  │ 8                                     │
+│ Max procs                                                 │ 2                                     │
+│ TSV chunk rows                                            │ 20000                                 │
+│ spaCy shard docs                                          │ 10000                                 │
+└───────────────────────────────────────────────────────────┴───────────────────────────────────────┘
+
+                                           Train & Divers                                            
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ                                                     ┃ Valeur                                ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Train prop                                                │ 0.8                                   │
+│ Min chars                                                 │ 200                                   │
+│ Max tokens                                                │ 512                                   │
+│ Tokenizer                                                 │ None                                  │
+│ Seed                                                      │ 45                                    │
+│ Debug mode                                                │ False                                 │
+└───────────────────────────────────────────────────────────┴───────────────────────────────────────┘
+
+[prepare:seed] Global seed: appliquée (45)
+[prepare:info] tokenizer=split dedup_on=none
+[core_prepare] Lecture TEI: data/raw/web1/corpus.xml (source=web1)
+[core_prepare] Docs retenus avant équilibrage: 252997
+[core_prepare] Répartition labels (avant balance): Counter({'right': 171790, 'left': 81207})
+[core_prepare] Répartition modalités (tous docs vus): Counter({'web': 364069})
+[prepare:collect] Docs retenus avant dedup: 252997
+[prepare:limit] max_docs_global=1500 applique : 1500 docs conserves apres dedup
+[core_prepare] Docs après équilibrage train (oversample): 1200
+[core_prepare] Répartition labels train (après balance): Counter({'left': 1077, 'right': 123})
+[core_prepare] Split train/job stratifié avec train_prop=0.8
+  -> train (avant balance): 1200 docs | Counter({'left': 1077, 'right': 123})
+  -> job  (naturel)      : 300 docs | Counter({'left': 269, 'right': 31})
+[core_prepare] train.tsv écrit : data/interim/web1/ideology_global/train.tsv
+[core_prepare] job.tsv écrit   : data/interim/web1/ideology_global/job.tsv
+[core_prepare] meta_view.json  : data/interim/web1/ideology_global/meta_view.json
+[prepare:spacy] Construction des DocBin...
+[prepare:formats] Formats écrits → data/processed/web1/ideology_global/meta_formats.json
+[train] Profil: ideo_quick  Famille: spacy
+.venv/bin/python scripts/core/core_train.py \
+--profile ideo_quick \
+--override corpus_id=web1 --override train_prop=0.8 --override balance_strategy=oversample --override balance_preset=parity --override hardware_preset=small --override seed=45 --override max_train_docs_sklearn=100 --override max_train_docs_spacy=100 --override max_train_docs_hf=20 --override view=ideology_global --override max_docs_global=1500 --override dataset_id=web1 --override data.corpus_ids=[web1] --override data.merge_mode=single --override analysis.compare_by=[] --override families=[spacy] --override models_spacy=[spacy_cnn_quick] \
+--only-family spacy \
+--verbose
+
+╭─────────────────────────────────────── CONFIG ────────────────────────────────────────╮
+│ Pipeline V4                                                                           │
+│ profile=ideo_quick                                                                    │
+│ version=4.0.0-dev                                                                     │
+│ Vue idéologie globale – run complet mais raisonnable (tous les modèles spaCy+sklearn) │
+╰─────────────────────────────────── params résolus ────────────────────────────────────╯
+
+                                           Corpus & Profil                                           
+┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ       ┃ Valeur                                                                              ┃
+┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Profil      │ ideo_quick                                                                          │
+│ Desc        │ Vue idéologie globale – run complet mais raisonnable (tous les modèles              │
+│             │ spaCy+sklearn)                                                                      │
+│ Corpus id   │ web1                                                                                │
+│ Corpus path │ data/raw/web1/corpus.xml                                                            │
+│ View        │ ideology_global                                                                     │
+│ Modality    │ None                                                                                │
+│ Label field │ ideology_label                                                                      │
+└─────────────┴─────────────────────────────────────────────────────────────────────────────────────┘
+
+                                         Familles & Modèles                                          
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Famille  ┃ Valeur                                                                                 ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Families │ check, spacy, sklearn                                                                  │
+│ spaCy    │ spacy_cnn_quick, spacy_bow_quick                                                       │
+│ sklearn  │ tfidf_svm_quick, tfidf_smo_linear, tfidf_smo_rbf, tfidf_perceptron, tfidf_randomtree,  │
+│          │ tfidf_randomforest                                                                     │
+│ HF       │ -                                                                                      │
+└──────────┴────────────────────────────────────────────────────────────────────────────────────────┘
+
+                                         Balance & Hardware                                          
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ                                                     ┃ Valeur                                ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Balance strategy                                          │ oversample                            │
+│ Balance preset                                            │ parity                                │
+│ HW preset                                                 │ small                                 │
+│ RAM (GB)                                                  │ 8                                     │
+│ Max procs                                                 │ 2                                     │
+│ TSV chunk rows                                            │ 20000                                 │
+│ spaCy shard docs                                          │ 10000                                 │
+└───────────────────────────────────────────────────────────┴───────────────────────────────────────┘
+
+                                           Train & Divers                                            
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ                                                     ┃ Valeur                                ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Train prop                                                │ 0.8                                   │
+│ Min chars                                                 │ 200                                   │
+│ Max tokens                                                │ 512                                   │
+│ Tokenizer                                                 │ None                                  │
+│ Seed                                                      │ 45                                    │
+│ Debug mode                                                │ False                                 │
+└───────────────────────────────────────────────────────────┴───────────────────────────────────────┘
+
+[train:seed] Global seed: appliquée (45)
+[core_train] BLAS threads fixés à 1
+[core_train] Modèles à entraîner :
+  - spacy::spacy_cnn_quick
+[train:spacy] Seed spaCy=45
+[train:spacy] Train spacy_cnn_quick | epochs=5 | template=configs/spacy/textcat_cnn_base.cfg | max_docs_spacy=100
+[38;5;4mℹ Saving to output directory:
+models/web1/ideology_global/spacy/spacy_cnn_quick[0m
+[38;5;4mℹ Using CPU[0m
+[1m
+=========================== Initializing pipeline ===========================[0m
+[38;5;2m✔ Initialized pipeline[0m
+[1m
+============================= Training pipeline =============================[0m
+[38;5;4mℹ Pipeline: ['textcat'][0m
+[38;5;4mℹ Initial learn rate: 0.001[0m
+E    #       LOSS TEXTCAT  CATS_SCORE  SCORE 
+---  ------  ------------  ----------  ------
+  0       0          0.25       47.28    0.47
+  2     200         13.09       61.60    0.62
+  4     400          2.45       65.55    0.66
+[38;5;2m✔ Saved pipeline to output directory[0m
+models/web1/ideology_global/spacy/spacy_cnn_quick/model-last
+[core_train] meta_model.json écrit : models/web1/ideology_global/spacy/spacy_cnn_quick/meta_model.json
+[evaluate] Profil: ideo_quick  Famille: spacy
+.venv/bin/python scripts/core/core_evaluate.py \
+--profile ideo_quick \
+--override corpus_id=web1 --override train_prop=0.8 --override balance_strategy=oversample --override balance_preset=parity --override hardware_preset=small --override seed=45 --override max_train_docs_sklearn=100 --override max_train_docs_spacy=100 --override max_train_docs_hf=20 --override view=ideology_global --override max_docs_global=1500 --override dataset_id=web1 --override data.corpus_ids=[web1] --override data.merge_mode=single --override analysis.compare_by=[] --override families=[spacy] --override models_spacy=[spacy_cnn_quick] \
+--only-family spacy \
+--verbose
+
+╭─────────────────────────────────────── CONFIG ────────────────────────────────────────╮
+│ Pipeline V4                                                                           │
+│ profile=ideo_quick                                                                    │
+│ version=4.0.0-dev                                                                     │
+│ Vue idéologie globale – run complet mais raisonnable (tous les modèles spaCy+sklearn) │
+╰─────────────────────────────────── params résolus ────────────────────────────────────╯
+
+                                           Corpus & Profil                                           
+┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ       ┃ Valeur                                                                              ┃
+┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Profil      │ ideo_quick                                                                          │
+│ Desc        │ Vue idéologie globale – run complet mais raisonnable (tous les modèles              │
+│             │ spaCy+sklearn)                                                                      │
+│ Corpus id   │ web1                                                                                │
+│ Corpus path │ data/raw/web1/corpus.xml                                                            │
+│ View        │ ideology_global                                                                     │
+│ Modality    │ None                                                                                │
+│ Label field │ ideology_label                                                                      │
+└─────────────┴─────────────────────────────────────────────────────────────────────────────────────┘
+
+                                         Familles & Modèles                                          
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Famille  ┃ Valeur                                                                                 ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Families │ check, spacy, sklearn                                                                  │
+│ spaCy    │ spacy_cnn_quick, spacy_bow_quick                                                       │
+│ sklearn  │ tfidf_svm_quick, tfidf_smo_linear, tfidf_smo_rbf, tfidf_perceptron, tfidf_randomtree,  │
+│          │ tfidf_randomforest                                                                     │
+│ HF       │ -                                                                                      │
+└──────────┴────────────────────────────────────────────────────────────────────────────────────────┘
+
+                                         Balance & Hardware                                          
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ                                                     ┃ Valeur                                ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Balance strategy                                          │ oversample                            │
+│ Balance preset                                            │ parity                                │
+│ HW preset                                                 │ small                                 │
+│ RAM (GB)                                                  │ 8                                     │
+│ Max procs                                                 │ 2                                     │
+│ TSV chunk rows                                            │ 20000                                 │
+│ spaCy shard docs                                          │ 10000                                 │
+└───────────────────────────────────────────────────────────┴───────────────────────────────────────┘
+
+                                           Train & Divers                                            
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ                                                     ┃ Valeur                                ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Train prop                                                │ 0.8                                   │
+│ Min chars                                                 │ 200                                   │
+│ Max tokens                                                │ 512                                   │
+│ Tokenizer                                                 │ None                                  │
+│ Seed                                                      │ 45                                    │
+│ Debug mode                                                │ False                                 │
+└───────────────────────────────────────────────────────────┴───────────────────────────────────────┘
+
+[evaluate:seed] Global seed: appliquée (45)
+[core_evaluate] BLAS threads fixés à 1
+[core_evaluate] Modèles à évaluer :
+  - spacy::spacy_cnn_quick
+[core_evaluate:spacy] Chargement modèle depuis models/web1/ideology_global/spacy/spacy_cnn_quick/model-best
+[core_evaluate:spacy] Utilisation de 1 DocBin job*.spacy dans data/processed/web1/ideology_global/spacy
+[core_evaluate:spacy] Évaluation sur 300 docs.
+[core_evaluate] metrics.json écrit : reports/web1/ideology_global/spacy/spacy_cnn_quick/metrics.json
+[core_evaluate] classification_report.txt écrit : reports/web1/ideology_global/spacy/spacy_cnn_quick/classification_report.txt
+[core_evaluate] meta_eval.json écrit : reports/web1/ideology_global/spacy/spacy_cnn_quick/meta_eval.json
+make[1]: Leaving directory '/media/teas/disque_B1/PEPM_M1srbn-project-PEMP_V5.5-CPU-main'

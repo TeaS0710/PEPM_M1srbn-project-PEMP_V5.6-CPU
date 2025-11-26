@@ -1,7 +1,7 @@
 [run_single] exp_id=ideo_balancing_sweep run_id=ideo_balancing_sweep_run_000002
-[run_single] CMD: make run STAGE=pipeline PROFILE=ideo_quick BALANCE_STRATEGY=oversample BALANCE_PRESET=parity FAMILY=sklearn SEED=44 OVERRIDES=view=ideology_global max_docs_global=1500 dataset_id=web1 data.corpus_ids=["web1"] data.merge_mode=single analysis.compare_by=[] families=["sklearn"] models_sklearn=["tfidf_svm_quick"]
+[run_single] CMD: make run STAGE=pipeline PROFILE=ideo_quick HARDWARE_PRESET=small TRAIN_PROP=0.8 MAX_DOCS_SKLEARN=100 MAX_DOCS_SPACY=100 MAX_DOCS_HF=20 BALANCE_STRATEGY=oversample BALANCE_PRESET=parity FAMILY=sklearn SEED=44 OVERRIDES=view=ideology_global max_docs_global=1500 dataset_id=web1 data.corpus_ids=["web1"] data.merge_mode=single analysis.compare_by=[] families=["sklearn"] models_sklearn=["tfidf_svm_quick"]
 [run] STAGE=pipeline PROFILE=ideo_quick FAMILY=sklearn
-make[1]: Entering directory '/media/teas/disque_B/PEPM_M1srbn-project-PEMP_V5.5-CPU-main'
+make[1]: Entering directory '/media/teas/disque_B1/PEPM_M1srbn-project-PEMP_V5.5-CPU-main'
 .venv/bin/python scripts/pre/pre_check_env.py --profile ideo_quick || true
 [env] Profil cible (info): ideo_quick
 [env] Vérification des imports critiques...
@@ -17,7 +17,7 @@ make[1]: Entering directory '/media/teas/disque_B/PEPM_M1srbn-project-PEMP_V5.5-
 [check] Vérification du profil ideo_quick...
 .venv/bin/python scripts/pre/pre_check_config.py \
 --profile ideo_quick \
---override corpus_id=web1 --override balance_strategy=oversample --override balance_preset=parity --override seed=44 --override view=ideology_global --override max_docs_global=1500 --override dataset_id=web1 --override data.corpus_ids=[web1] --override data.merge_mode=single --override analysis.compare_by=[] --override families=[sklearn] --override models_sklearn=[tfidf_svm_quick] \
+--override corpus_id=web1 --override train_prop=0.8 --override balance_strategy=oversample --override balance_preset=parity --override hardware_preset=small --override seed=44 --override max_train_docs_sklearn=100 --override max_train_docs_spacy=100 --override max_train_docs_hf=20 --override view=ideology_global --override max_docs_global=1500 --override dataset_id=web1 --override data.corpus_ids=[web1] --override data.merge_mode=single --override analysis.compare_by=[] --override families=[sklearn] --override models_sklearn=[tfidf_svm_quick] \
 --verbose
 [config] WARNING: label_map non défini dans le profil
 
@@ -28,60 +28,62 @@ make[1]: Entering directory '/media/teas/disque_B/PEPM_M1srbn-project-PEMP_V5.5-
 │ Vue idéologie globale – run complet mais raisonnable (tous les modèles spaCy+sklearn) │
 ╰─────────────────────────────────── params résolus ────────────────────────────────────╯
 
-                                                           Corpus & Profil                                                           
-┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Champ           ┃ Valeur                                                                                                          ┃
-┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Profil          │ ideo_quick                                                                                                      │
-│ Desc            │ Vue idéologie globale – run complet mais raisonnable (tous les modèles spaCy+sklearn)                           │
-│ Corpus id       │ web1                                                                                                            │
-│ Corpus path     │ data/raw/web1/corpus.xml                                                                                        │
-│ View            │ ideology_global                                                                                                 │
-│ Modality        │ None                                                                                                            │
-│ Label field     │ ideology_label                                                                                                  │
-└─────────────────┴─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                           Corpus & Profil                                           
+┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ       ┃ Valeur                                                                              ┃
+┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Profil      │ ideo_quick                                                                          │
+│ Desc        │ Vue idéologie globale – run complet mais raisonnable (tous les modèles              │
+│             │ spaCy+sklearn)                                                                      │
+│ Corpus id   │ web1                                                                                │
+│ Corpus path │ data/raw/web1/corpus.xml                                                            │
+│ View        │ ideology_global                                                                     │
+│ Modality    │ None                                                                                │
+│ Label field │ ideology_label                                                                      │
+└─────────────┴─────────────────────────────────────────────────────────────────────────────────────┘
 
-                                                         Familles & Modèles                                                          
-┏━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Famille    ┃ Valeur                                                                                                               ┃
-┡━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Families   │ check, spacy, sklearn                                                                                                │
-│ spaCy      │ spacy_cnn_quick, spacy_bow_quick                                                                                     │
-│ sklearn    │ tfidf_svm_quick, tfidf_smo_linear, tfidf_smo_rbf, tfidf_perceptron, tfidf_randomtree, tfidf_randomforest             │
-│ HF         │ -                                                                                                                    │
-└────────────┴──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                         Familles & Modèles                                          
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Famille  ┃ Valeur                                                                                 ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Families │ check, spacy, sklearn                                                                  │
+│ spaCy    │ spacy_cnn_quick, spacy_bow_quick                                                       │
+│ sklearn  │ tfidf_svm_quick, tfidf_smo_linear, tfidf_smo_rbf, tfidf_perceptron, tfidf_randomtree,  │
+│          │ tfidf_randomforest                                                                     │
+│ HF       │ -                                                                                      │
+└──────────┴────────────────────────────────────────────────────────────────────────────────────────┘
 
-                                                         Balance & Hardware                                                          
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Champ                                                                        ┃ Valeur                                             ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Balance strategy                                                             │ oversample                                         │
-│ Balance preset                                                               │ parity                                             │
-│ HW preset                                                                    │ small                                              │
-│ RAM (GB)                                                                     │ 8                                                  │
-│ Max procs                                                                    │ 2                                                  │
-│ TSV chunk rows                                                               │ 20000                                              │
-│ spaCy shard docs                                                             │ 10000                                              │
-└──────────────────────────────────────────────────────────────────────────────┴────────────────────────────────────────────────────┘
+                                         Balance & Hardware                                          
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ                                                     ┃ Valeur                                ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Balance strategy                                          │ oversample                            │
+│ Balance preset                                            │ parity                                │
+│ HW preset                                                 │ small                                 │
+│ RAM (GB)                                                  │ 8                                     │
+│ Max procs                                                 │ 2                                     │
+│ TSV chunk rows                                            │ 20000                                 │
+│ spaCy shard docs                                          │ 10000                                 │
+└───────────────────────────────────────────────────────────┴───────────────────────────────────────┘
 
-                                                           Train & Divers                                                            
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Champ                                                                        ┃ Valeur                                             ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Train prop                                                                   │ 0.7                                                │
-│ Min chars                                                                    │ 200                                                │
-│ Max tokens                                                                   │ 512                                                │
-│ Tokenizer                                                                    │ None                                               │
-│ Seed                                                                         │ 44                                                 │
-│ Debug mode                                                                   │ False                                              │
-└──────────────────────────────────────────────────────────────────────────────┴────────────────────────────────────────────────────┘
+                                           Train & Divers                                            
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ                                                     ┃ Valeur                                ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Train prop                                                │ 0.8                                   │
+│ Min chars                                                 │ 200                                   │
+│ Max tokens                                                │ 512                                   │
+│ Tokenizer                                                 │ None                                  │
+│ Seed                                                      │ 44                                    │
+│ Debug mode                                                │ False                                 │
+└───────────────────────────────────────────────────────────┴───────────────────────────────────────┘
 
 [OK] Profil 'ideo_quick' validé.
 [check] OK : environnement + scripts + profil ideo_quick validés.
 [prepare] Profil: ideo_quick
 .venv/bin/python scripts/core/core_prepare.py \
 --profile ideo_quick \
---override corpus_id=web1 --override balance_strategy=oversample --override balance_preset=parity --override seed=44 --override view=ideology_global --override max_docs_global=1500 --override dataset_id=web1 --override data.corpus_ids=[web1] --override data.merge_mode=single --override analysis.compare_by=[] --override families=[sklearn] --override models_sklearn=[tfidf_svm_quick] \
+--override corpus_id=web1 --override train_prop=0.8 --override balance_strategy=oversample --override balance_preset=parity --override hardware_preset=small --override seed=44 --override max_train_docs_sklearn=100 --override max_train_docs_spacy=100 --override max_train_docs_hf=20 --override view=ideology_global --override max_docs_global=1500 --override dataset_id=web1 --override data.corpus_ids=[web1] --override data.merge_mode=single --override analysis.compare_by=[] --override families=[sklearn] --override models_sklearn=[tfidf_svm_quick] \
 --verbose
 
 ╭─────────────────────────────────────── CONFIG ────────────────────────────────────────╮
@@ -91,53 +93,55 @@ make[1]: Entering directory '/media/teas/disque_B/PEPM_M1srbn-project-PEMP_V5.5-
 │ Vue idéologie globale – run complet mais raisonnable (tous les modèles spaCy+sklearn) │
 ╰─────────────────────────────────── params résolus ────────────────────────────────────╯
 
-                                                           Corpus & Profil                                                           
-┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Champ           ┃ Valeur                                                                                                          ┃
-┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Profil          │ ideo_quick                                                                                                      │
-│ Desc            │ Vue idéologie globale – run complet mais raisonnable (tous les modèles spaCy+sklearn)                           │
-│ Corpus id       │ web1                                                                                                            │
-│ Corpus path     │ data/raw/web1/corpus.xml                                                                                        │
-│ View            │ ideology_global                                                                                                 │
-│ Modality        │ None                                                                                                            │
-│ Label field     │ ideology_label                                                                                                  │
-└─────────────────┴─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                           Corpus & Profil                                           
+┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ       ┃ Valeur                                                                              ┃
+┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Profil      │ ideo_quick                                                                          │
+│ Desc        │ Vue idéologie globale – run complet mais raisonnable (tous les modèles              │
+│             │ spaCy+sklearn)                                                                      │
+│ Corpus id   │ web1                                                                                │
+│ Corpus path │ data/raw/web1/corpus.xml                                                            │
+│ View        │ ideology_global                                                                     │
+│ Modality    │ None                                                                                │
+│ Label field │ ideology_label                                                                      │
+└─────────────┴─────────────────────────────────────────────────────────────────────────────────────┘
 
-                                                         Familles & Modèles                                                          
-┏━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Famille    ┃ Valeur                                                                                                               ┃
-┡━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Families   │ check, spacy, sklearn                                                                                                │
-│ spaCy      │ spacy_cnn_quick, spacy_bow_quick                                                                                     │
-│ sklearn    │ tfidf_svm_quick, tfidf_smo_linear, tfidf_smo_rbf, tfidf_perceptron, tfidf_randomtree, tfidf_randomforest             │
-│ HF         │ -                                                                                                                    │
-└────────────┴──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                         Familles & Modèles                                          
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Famille  ┃ Valeur                                                                                 ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Families │ check, spacy, sklearn                                                                  │
+│ spaCy    │ spacy_cnn_quick, spacy_bow_quick                                                       │
+│ sklearn  │ tfidf_svm_quick, tfidf_smo_linear, tfidf_smo_rbf, tfidf_perceptron, tfidf_randomtree,  │
+│          │ tfidf_randomforest                                                                     │
+│ HF       │ -                                                                                      │
+└──────────┴────────────────────────────────────────────────────────────────────────────────────────┘
 
-                                                         Balance & Hardware                                                          
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Champ                                                                        ┃ Valeur                                             ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Balance strategy                                                             │ oversample                                         │
-│ Balance preset                                                               │ parity                                             │
-│ HW preset                                                                    │ small                                              │
-│ RAM (GB)                                                                     │ 8                                                  │
-│ Max procs                                                                    │ 2                                                  │
-│ TSV chunk rows                                                               │ 20000                                              │
-│ spaCy shard docs                                                             │ 10000                                              │
-└──────────────────────────────────────────────────────────────────────────────┴────────────────────────────────────────────────────┘
+                                         Balance & Hardware                                          
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ                                                     ┃ Valeur                                ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Balance strategy                                          │ oversample                            │
+│ Balance preset                                            │ parity                                │
+│ HW preset                                                 │ small                                 │
+│ RAM (GB)                                                  │ 8                                     │
+│ Max procs                                                 │ 2                                     │
+│ TSV chunk rows                                            │ 20000                                 │
+│ spaCy shard docs                                          │ 10000                                 │
+└───────────────────────────────────────────────────────────┴───────────────────────────────────────┘
 
-                                                           Train & Divers                                                            
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Champ                                                                        ┃ Valeur                                             ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Train prop                                                                   │ 0.7                                                │
-│ Min chars                                                                    │ 200                                                │
-│ Max tokens                                                                   │ 512                                                │
-│ Tokenizer                                                                    │ None                                               │
-│ Seed                                                                         │ 44                                                 │
-│ Debug mode                                                                   │ False                                              │
-└──────────────────────────────────────────────────────────────────────────────┴────────────────────────────────────────────────────┘
+                                           Train & Divers                                            
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ                                                     ┃ Valeur                                ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Train prop                                                │ 0.8                                   │
+│ Min chars                                                 │ 200                                   │
+│ Max tokens                                                │ 512                                   │
+│ Tokenizer                                                 │ None                                  │
+│ Seed                                                      │ 44                                    │
+│ Debug mode                                                │ False                                 │
+└───────────────────────────────────────────────────────────┴───────────────────────────────────────┘
 
 [prepare:seed] Global seed: appliquée (44)
 [prepare:info] tokenizer=split dedup_on=none
@@ -147,11 +151,11 @@ make[1]: Entering directory '/media/teas/disque_B/PEPM_M1srbn-project-PEMP_V5.5-
 [core_prepare] Répartition modalités (tous docs vus): Counter({'web': 364069})
 [prepare:collect] Docs retenus avant dedup: 252997
 [prepare:limit] max_docs_global=1500 applique : 1500 docs conserves apres dedup
-[core_prepare] Docs après équilibrage train (oversample): 1050
-[core_prepare] Répartition labels train (après balance): Counter({'left': 942, 'right': 108})
-[core_prepare] Split train/job stratifié avec train_prop=0.7
-  -> train (avant balance): 1050 docs | Counter({'left': 942, 'right': 108})
-  -> job  (naturel)      : 450 docs | Counter({'left': 404, 'right': 46})
+[core_prepare] Docs après équilibrage train (oversample): 1200
+[core_prepare] Répartition labels train (après balance): Counter({'left': 1077, 'right': 123})
+[core_prepare] Split train/job stratifié avec train_prop=0.8
+  -> train (avant balance): 1200 docs | Counter({'left': 1077, 'right': 123})
+  -> job  (naturel)      : 300 docs | Counter({'left': 269, 'right': 31})
 [core_prepare] train.tsv écrit : data/interim/web1/ideology_global/train.tsv
 [core_prepare] job.tsv écrit   : data/interim/web1/ideology_global/job.tsv
 [core_prepare] meta_view.json  : data/interim/web1/ideology_global/meta_view.json
@@ -159,7 +163,7 @@ make[1]: Entering directory '/media/teas/disque_B/PEPM_M1srbn-project-PEMP_V5.5-
 [train] Profil: ideo_quick  Famille: sklearn
 .venv/bin/python scripts/core/core_train.py \
 --profile ideo_quick \
---override corpus_id=web1 --override balance_strategy=oversample --override balance_preset=parity --override seed=44 --override view=ideology_global --override max_docs_global=1500 --override dataset_id=web1 --override data.corpus_ids=[web1] --override data.merge_mode=single --override analysis.compare_by=[] --override families=[sklearn] --override models_sklearn=[tfidf_svm_quick] \
+--override corpus_id=web1 --override train_prop=0.8 --override balance_strategy=oversample --override balance_preset=parity --override hardware_preset=small --override seed=44 --override max_train_docs_sklearn=100 --override max_train_docs_spacy=100 --override max_train_docs_hf=20 --override view=ideology_global --override max_docs_global=1500 --override dataset_id=web1 --override data.corpus_ids=[web1] --override data.merge_mode=single --override analysis.compare_by=[] --override families=[sklearn] --override models_sklearn=[tfidf_svm_quick] \
 --only-family sklearn \
 --verbose
 
@@ -170,65 +174,68 @@ make[1]: Entering directory '/media/teas/disque_B/PEPM_M1srbn-project-PEMP_V5.5-
 │ Vue idéologie globale – run complet mais raisonnable (tous les modèles spaCy+sklearn) │
 ╰─────────────────────────────────── params résolus ────────────────────────────────────╯
 
-                                                           Corpus & Profil                                                           
-┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Champ           ┃ Valeur                                                                                                          ┃
-┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Profil          │ ideo_quick                                                                                                      │
-│ Desc            │ Vue idéologie globale – run complet mais raisonnable (tous les modèles spaCy+sklearn)                           │
-│ Corpus id       │ web1                                                                                                            │
-│ Corpus path     │ data/raw/web1/corpus.xml                                                                                        │
-│ View            │ ideology_global                                                                                                 │
-│ Modality        │ None                                                                                                            │
-│ Label field     │ ideology_label                                                                                                  │
-└─────────────────┴─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                           Corpus & Profil                                           
+┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ       ┃ Valeur                                                                              ┃
+┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Profil      │ ideo_quick                                                                          │
+│ Desc        │ Vue idéologie globale – run complet mais raisonnable (tous les modèles              │
+│             │ spaCy+sklearn)                                                                      │
+│ Corpus id   │ web1                                                                                │
+│ Corpus path │ data/raw/web1/corpus.xml                                                            │
+│ View        │ ideology_global                                                                     │
+│ Modality    │ None                                                                                │
+│ Label field │ ideology_label                                                                      │
+└─────────────┴─────────────────────────────────────────────────────────────────────────────────────┘
 
-                                                         Familles & Modèles                                                          
-┏━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Famille    ┃ Valeur                                                                                                               ┃
-┡━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Families   │ check, spacy, sklearn                                                                                                │
-│ spaCy      │ spacy_cnn_quick, spacy_bow_quick                                                                                     │
-│ sklearn    │ tfidf_svm_quick, tfidf_smo_linear, tfidf_smo_rbf, tfidf_perceptron, tfidf_randomtree, tfidf_randomforest             │
-│ HF         │ -                                                                                                                    │
-└────────────┴──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                         Familles & Modèles                                          
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Famille  ┃ Valeur                                                                                 ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Families │ check, spacy, sklearn                                                                  │
+│ spaCy    │ spacy_cnn_quick, spacy_bow_quick                                                       │
+│ sklearn  │ tfidf_svm_quick, tfidf_smo_linear, tfidf_smo_rbf, tfidf_perceptron, tfidf_randomtree,  │
+│          │ tfidf_randomforest                                                                     │
+│ HF       │ -                                                                                      │
+└──────────┴────────────────────────────────────────────────────────────────────────────────────────┘
 
-                                                         Balance & Hardware                                                          
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Champ                                                                        ┃ Valeur                                             ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Balance strategy                                                             │ oversample                                         │
-│ Balance preset                                                               │ parity                                             │
-│ HW preset                                                                    │ small                                              │
-│ RAM (GB)                                                                     │ 8                                                  │
-│ Max procs                                                                    │ 2                                                  │
-│ TSV chunk rows                                                               │ 20000                                              │
-│ spaCy shard docs                                                             │ 10000                                              │
-└──────────────────────────────────────────────────────────────────────────────┴────────────────────────────────────────────────────┘
+                                         Balance & Hardware                                          
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ                                                     ┃ Valeur                                ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Balance strategy                                          │ oversample                            │
+│ Balance preset                                            │ parity                                │
+│ HW preset                                                 │ small                                 │
+│ RAM (GB)                                                  │ 8                                     │
+│ Max procs                                                 │ 2                                     │
+│ TSV chunk rows                                            │ 20000                                 │
+│ spaCy shard docs                                          │ 10000                                 │
+└───────────────────────────────────────────────────────────┴───────────────────────────────────────┘
 
-                                                           Train & Divers                                                            
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Champ                                                                        ┃ Valeur                                             ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Train prop                                                                   │ 0.7                                                │
-│ Min chars                                                                    │ 200                                                │
-│ Max tokens                                                                   │ 512                                                │
-│ Tokenizer                                                                    │ None                                               │
-│ Seed                                                                         │ 44                                                 │
-│ Debug mode                                                                   │ False                                              │
-└──────────────────────────────────────────────────────────────────────────────┴────────────────────────────────────────────────────┘
+                                           Train & Divers                                            
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ                                                     ┃ Valeur                                ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Train prop                                                │ 0.8                                   │
+│ Min chars                                                 │ 200                                   │
+│ Max tokens                                                │ 512                                   │
+│ Tokenizer                                                 │ None                                  │
+│ Seed                                                      │ 44                                    │
+│ Debug mode                                                │ False                                 │
+└───────────────────────────────────────────────────────────┴───────────────────────────────────────┘
 
 [train:seed] Global seed: appliquée (44)
 [core_train] BLAS threads fixés à 1
 [core_train] Modèles à entraîner :
   - sklearn::tfidf_svm_quick
-[core_train:sklearn] Modèle=tfidf_svm_quick, 1050 docs d'entraînement (raw=1050).
+[core_train:sklearn] max_train_docs_sklearn=100, tronque 1200 -> 100 docs
+[core_train:sklearn] Modèle=tfidf_svm_quick, 100 docs d'entraînement (raw=1200).
 [core_train:sklearn] Modèle sklearn sauvegardé dans models/web1/ideology_global/sklearn/tfidf_svm_quick/model.joblib
 [core_train] meta_model.json écrit : models/web1/ideology_global/sklearn/tfidf_svm_quick/meta_model.json
 [evaluate] Profil: ideo_quick  Famille: sklearn
 .venv/bin/python scripts/core/core_evaluate.py \
 --profile ideo_quick \
---override corpus_id=web1 --override balance_strategy=oversample --override balance_preset=parity --override seed=44 --override view=ideology_global --override max_docs_global=1500 --override dataset_id=web1 --override data.corpus_ids=[web1] --override data.merge_mode=single --override analysis.compare_by=[] --override families=[sklearn] --override models_sklearn=[tfidf_svm_quick] \
+--override corpus_id=web1 --override train_prop=0.8 --override balance_strategy=oversample --override balance_preset=parity --override hardware_preset=small --override seed=44 --override max_train_docs_sklearn=100 --override max_train_docs_spacy=100 --override max_train_docs_hf=20 --override view=ideology_global --override max_docs_global=1500 --override dataset_id=web1 --override data.corpus_ids=[web1] --override data.merge_mode=single --override analysis.compare_by=[] --override families=[sklearn] --override models_sklearn=[tfidf_svm_quick] \
 --only-family sklearn \
 --verbose
 
@@ -239,61 +246,63 @@ make[1]: Entering directory '/media/teas/disque_B/PEPM_M1srbn-project-PEMP_V5.5-
 │ Vue idéologie globale – run complet mais raisonnable (tous les modèles spaCy+sklearn) │
 ╰─────────────────────────────────── params résolus ────────────────────────────────────╯
 
-                                                           Corpus & Profil                                                           
-┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Champ           ┃ Valeur                                                                                                          ┃
-┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Profil          │ ideo_quick                                                                                                      │
-│ Desc            │ Vue idéologie globale – run complet mais raisonnable (tous les modèles spaCy+sklearn)                           │
-│ Corpus id       │ web1                                                                                                            │
-│ Corpus path     │ data/raw/web1/corpus.xml                                                                                        │
-│ View            │ ideology_global                                                                                                 │
-│ Modality        │ None                                                                                                            │
-│ Label field     │ ideology_label                                                                                                  │
-└─────────────────┴─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                           Corpus & Profil                                           
+┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ       ┃ Valeur                                                                              ┃
+┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Profil      │ ideo_quick                                                                          │
+│ Desc        │ Vue idéologie globale – run complet mais raisonnable (tous les modèles              │
+│             │ spaCy+sklearn)                                                                      │
+│ Corpus id   │ web1                                                                                │
+│ Corpus path │ data/raw/web1/corpus.xml                                                            │
+│ View        │ ideology_global                                                                     │
+│ Modality    │ None                                                                                │
+│ Label field │ ideology_label                                                                      │
+└─────────────┴─────────────────────────────────────────────────────────────────────────────────────┘
 
-                                                         Familles & Modèles                                                          
-┏━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Famille    ┃ Valeur                                                                                                               ┃
-┡━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Families   │ check, spacy, sklearn                                                                                                │
-│ spaCy      │ spacy_cnn_quick, spacy_bow_quick                                                                                     │
-│ sklearn    │ tfidf_svm_quick, tfidf_smo_linear, tfidf_smo_rbf, tfidf_perceptron, tfidf_randomtree, tfidf_randomforest             │
-│ HF         │ -                                                                                                                    │
-└────────────┴──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                         Familles & Modèles                                          
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Famille  ┃ Valeur                                                                                 ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Families │ check, spacy, sklearn                                                                  │
+│ spaCy    │ spacy_cnn_quick, spacy_bow_quick                                                       │
+│ sklearn  │ tfidf_svm_quick, tfidf_smo_linear, tfidf_smo_rbf, tfidf_perceptron, tfidf_randomtree,  │
+│          │ tfidf_randomforest                                                                     │
+│ HF       │ -                                                                                      │
+└──────────┴────────────────────────────────────────────────────────────────────────────────────────┘
 
-                                                         Balance & Hardware                                                          
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Champ                                                                        ┃ Valeur                                             ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Balance strategy                                                             │ oversample                                         │
-│ Balance preset                                                               │ parity                                             │
-│ HW preset                                                                    │ small                                              │
-│ RAM (GB)                                                                     │ 8                                                  │
-│ Max procs                                                                    │ 2                                                  │
-│ TSV chunk rows                                                               │ 20000                                              │
-│ spaCy shard docs                                                             │ 10000                                              │
-└──────────────────────────────────────────────────────────────────────────────┴────────────────────────────────────────────────────┘
+                                         Balance & Hardware                                          
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ                                                     ┃ Valeur                                ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Balance strategy                                          │ oversample                            │
+│ Balance preset                                            │ parity                                │
+│ HW preset                                                 │ small                                 │
+│ RAM (GB)                                                  │ 8                                     │
+│ Max procs                                                 │ 2                                     │
+│ TSV chunk rows                                            │ 20000                                 │
+│ spaCy shard docs                                          │ 10000                                 │
+└───────────────────────────────────────────────────────────┴───────────────────────────────────────┘
 
-                                                           Train & Divers                                                            
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Champ                                                                        ┃ Valeur                                             ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Train prop                                                                   │ 0.7                                                │
-│ Min chars                                                                    │ 200                                                │
-│ Max tokens                                                                   │ 512                                                │
-│ Tokenizer                                                                    │ None                                               │
-│ Seed                                                                         │ 44                                                 │
-│ Debug mode                                                                   │ False                                              │
-└──────────────────────────────────────────────────────────────────────────────┴────────────────────────────────────────────────────┘
+                                           Train & Divers                                            
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Champ                                                     ┃ Valeur                                ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Train prop                                                │ 0.8                                   │
+│ Min chars                                                 │ 200                                   │
+│ Max tokens                                                │ 512                                   │
+│ Tokenizer                                                 │ None                                  │
+│ Seed                                                      │ 44                                    │
+│ Debug mode                                                │ False                                 │
+└───────────────────────────────────────────────────────────┴───────────────────────────────────────┘
 
 [evaluate:seed] Global seed: appliquée (44)
 [core_evaluate] BLAS threads fixés à 1
 [core_evaluate] Modèles à évaluer :
   - sklearn::tfidf_svm_quick
 [core_evaluate:sklearn] Chargement modèle depuis models/web1/ideology_global/sklearn/tfidf_svm_quick/model.joblib
-[core_evaluate:sklearn] Évaluation sur 450 docs.
+[core_evaluate:sklearn] Évaluation sur 300 docs.
 [core_evaluate] metrics.json écrit : reports/web1/ideology_global/sklearn/tfidf_svm_quick/metrics.json
 [core_evaluate] classification_report.txt écrit : reports/web1/ideology_global/sklearn/tfidf_svm_quick/classification_report.txt
 [core_evaluate] meta_eval.json écrit : reports/web1/ideology_global/sklearn/tfidf_svm_quick/meta_eval.json
-make[1]: Leaving directory '/media/teas/disque_B/PEPM_M1srbn-project-PEMP_V5.5-CPU-main'
+make[1]: Leaving directory '/media/teas/disque_B1/PEPM_M1srbn-project-PEMP_V5.5-CPU-main'

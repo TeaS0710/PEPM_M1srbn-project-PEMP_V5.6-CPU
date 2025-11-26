@@ -1,0 +1,35 @@
+{
+  "accuracy": 0.9536749738137117,
+  "macro_f1": 0.947155074242728,
+  "classification_report": {
+    "left": {
+      "precision": 0.9189629182996684,
+      "recall": 0.9384274367341913,
+      "f1-score": 0.9285931883263266,
+      "support": 16241.0
+    },
+    "right": {
+      "precision": 0.970600341036044,
+      "recall": 0.9608824727865417,
+      "f1-score": 0.9657169601591294,
+      "support": 34358.0
+    },
+    "accuracy": 0.9536749738137117,
+    "macro avg": {
+      "precision": 0.9447816296678562,
+      "recall": 0.9496549547603665,
+      "f1-score": 0.947155074242728,
+      "support": 50599.0
+    },
+    "weighted avg": {
+      "precision": 0.9540260335860652,
+      "recall": 0.9536749738137117,
+      "f1-score": 0.9538011677850399,
+      "support": 50599.0
+    }
+  },
+  "family": "sklearn",
+  "model_id": "tfidf_smo_linear",
+  "n_eval_docs": 50599,
+  "n_features": 50000
+}

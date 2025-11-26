@@ -1,11 +1,11 @@
 {
-  "profile": "ideo_quick",
+  "profile": "ideo_full",
   "dataset_id": "web1",
   "eval_dataset_id": "web1",
   "corpus_id": "web1",
   "view": "ideology_global",
-  "family": "spacy",
-  "model_id": "spacy_cnn_quick",
-  "n_eval_docs": 300,
+  "family": "sklearn",
+  "model_id": "tfidf_smo_rbf",
+  "n_eval_docs": 50599,
   "pipeline_version": "4.0.0-dev"
 }

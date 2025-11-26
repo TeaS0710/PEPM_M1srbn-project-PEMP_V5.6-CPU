@@ -1,0 +1,35 @@
+{
+  "accuracy": 0.9168165378762426,
+  "macro_f1": 0.9052393401744968,
+  "classification_report": {
+    "left": {
+      "precision": 0.8608445297504799,
+      "recall": 0.8836894279908872,
+      "f1-score": 0.8721174004192872,
+      "support": 16241.0
+    },
+    "right": {
+      "precision": 0.9443216317387332,
+      "recall": 0.9324756970720065,
+      "f1-score": 0.9383612799297064,
+      "support": 34358.0
+    },
+    "accuracy": 0.9168165378762426,
+    "macro avg": {
+      "precision": 0.9025830807446065,
+      "recall": 0.9080825625314468,
+      "f1-score": 0.9052393401744968,
+      "support": 50599.0
+    },
+    "weighted avg": {
+      "precision": 0.9175275920661858,
+      "recall": 0.9168165378762426,
+      "f1-score": 0.9170986690652878,
+      "support": 50599.0
+    }
+  },
+  "family": "sklearn",
+  "model_id": "tfidf_randomforest",
+  "n_eval_docs": 50599,
+  "n_features": 50000
+}
