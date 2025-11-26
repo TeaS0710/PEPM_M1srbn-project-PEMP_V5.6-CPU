@@ -27,6 +27,10 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     plt = None
 
+import os
+os.environ.setdefault("MPLBACKEND", "Agg")
+
+
 
 # ---------------------------------------------------------------------------
 # Data classes (see dev_V5.md §4)
@@ -142,9 +146,25 @@ def _merge_dicts(dicts: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def _format_override_value(value: Any) -> str:
+    # 1) dict / list → JSON compact
     if isinstance(value, (dict, list)):
-        return json.dumps(value)
+        return json.dumps(value, separators=(",", ":"))
+
+    # 2) Chaîne qui ressemble à du JSON → on la compacte aussi
+    if isinstance(value, str):
+        v = value.strip()
+        if (v.startswith("[") and v.endswith("]")) or (v.startswith("{") and v.endswith("}")):
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, (dict, list)):
+                    return json.dumps(parsed, separators=(",", ":"))
+            except Exception:
+                pass
+        return v
+
+    # 3) Fallback
     return str(value)
+
 
 
 def _resource_class_for(make_vars: Dict[str, str], scheduler: SchedulerConfig) -> str:
@@ -234,7 +254,7 @@ def load_exp_config(path: str) -> ExpConfig:
         description=raw.get("description", ""),
         base_profile=base_cfg.get("profile", ""),
         base_stage=base_cfg.get("stage", "pipeline"),
-        base_make_vars=base_cfg.get("fixed") or {},
+        base_make_vars = (base_cfg.get("make_vars") or base_cfg.get("fixed") or {})
         base_overrides=base_cfg.get("overrides") or {},
         axes=axes,
         grid_mode=grid_cfg.get("mode", "cartesian"),
