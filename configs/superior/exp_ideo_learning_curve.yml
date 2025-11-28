@@ -1,0 +1,146 @@
+exp_id: ideo_learning_curve
+description: "Courbe d'apprentissage: web1, ideo_global, plusieurs familles, train_prop 0.1-0.9"
+base_profile: ideo_quick
+base_stage: pipeline
+
+base_make_vars:
+  STAGE: pipeline
+  PROFILE: ideo_quick
+  # Hardware de base
+  HARDWARE_PRESET: small
+  MAX_RAM_GB: "8"
+  # Limiter un peu le coût (à ajuster si tu veux full run)
+  MAX_TRAIN_DOCS_SKLEARN: "20000"
+  MAX_TRAIN_DOCS_SPACY: "10000"
+
+base_overrides:
+  view: ideology_global
+  corpus_id: web1
+  dataset_id: web1
+  data:
+    corpus_ids: ["web1"]
+    merge_mode: single
+  analysis:
+    compare_by: []   # pour éviter de polluer les filtres
+
+axes:
+  # 1) Axe train_prop : 0.1 -> 0.9
+  - name: train_prop
+    type: choice
+    values:
+      - label: tp_0.1
+        make_vars:
+          TRAIN_PROP: "0.1"
+        overrides:
+          train_prop: 0.1
+      - label: tp_0.2
+        make_vars:
+          TRAIN_PROP: "0.2"
+        overrides:
+          train_prop: 0.2
+      - label: tp_0.3
+        make_vars:
+          TRAIN_PROP: "0.3"
+        overrides:
+          train_prop: 0.3
+      - label: tp_0.4
+        make_vars:
+          TRAIN_PROP: "0.4"
+        overrides:
+          train_prop: 0.4
+      - label: tp_0.5
+        make_vars:
+          TRAIN_PROP: "0.5"
+        overrides:
+          train_prop: 0.5
+      - label: tp_0.6
+        make_vars:
+          TRAIN_PROP: "0.6"
+        overrides:
+          train_prop: 0.6
+      - label: tp_0.7
+        make_vars:
+          TRAIN_PROP: "0.7"
+        overrides:
+          train_prop: 0.7
+      - label: tp_0.8
+        make_vars:
+          TRAIN_PROP: "0.8"
+        overrides:
+          train_prop: 0.8
+      - label: tp_0.9
+        make_vars:
+          TRAIN_PROP: "0.9"
+        overrides:
+          train_prop: 0.9
+
+  # 2) Axe familles/modèles (tu peux restreindre pour limiter le temps)
+  - name: family_model
+    type: choice
+    values:
+      - label: sklearn_svm
+        make_vars:
+          FAMILY: sklearn
+        overrides:
+          families: ["sklearn"]
+          models_sklearn: ["tfidf_svm_quick"]
+      - label: spacy_cnn
+        make_vars:
+          FAMILY: spacy
+        overrides:
+          families: ["spacy"]
+          models_spacy: ["spacy_cnn_quick"]
+
+  # 3) Éventuellement un axe "balance" si tu veux comparer oversample / none
+  - name: balance
+    type: choice
+    values:
+      - label: no_balance
+        make_vars:
+          BALANCE_STRATEGY: "none"
+        overrides:
+          balance_strategy: none
+          balance_preset: small_alpha
+      - label: oversample_parity
+        make_vars:
+          BALANCE_STRATEGY: "oversample"
+        overrides:
+          balance_strategy: oversample
+          balance_preset: parity
+
+grid_mode: "full"
+repeats: 1
+seed_strategy: "per_run"
+base_seed: 42
+
+scheduler:
+  parallel: 1
+  max_ram_gb: 8
+  resource_classes:
+    light: "light"
+  weights:
+    light: 1
+  max_weight: 2
+  approx_ram_per_class:
+    light: 4.0
+
+oom_policy:
+  on_oom: "skip"
+  backoff_factor: 0.5
+
+early_stop:
+  enabled: false
+
+safety:
+  enable_hard_ram_limit: false
+
+analysis_hooks:
+  after_experiment:
+    - kind: "metrics_vs_x"
+      metric: "accuracy"
+      x_axis: "TRAIN_PROP"
+      group_by: ["family", "balance_strategy"]
+    - kind: "metrics_vs_x"
+      metric: "macro_f1"
+      x_axis: "TRAIN_PROP"
+      group_by: ["family", "balance_strategy"]
