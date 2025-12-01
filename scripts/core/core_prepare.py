@@ -539,25 +539,37 @@ def build_view(params: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
 
             label_raw: Optional[str] = None
             label: Optional[str] = None
+
             if ideology_cfg:
                 label_raw, label, ideology_reason = resolve_ideology_label(row_meta, ideology_cfg)
                 if ideology_reason and ideology_reason != "ok":
                     ideology_stats[ideology_reason] += 1
             else:
+                # Cas non-idéologie (ex: vue "crawl", "domain", etc.)
+                # 1) On récupère le label brut dans le TEI
                 label_raw = extract_label_raw(elem, fields_for_labels)
                 if not label_raw:
                     continue
-                mapped = apply_label_mapping(
-                    label_raw,
-                    label_map or {},
-                    label_map_unknown_cfg,
-                )
-                if not mapped:
-                    continue
-                label = mapped
+
+                if label_map_path:
+                    # Un label_map est configuré : on applique le mapping
+                    mapped = apply_label_mapping(
+                        label_raw,
+                        label_map or {},
+                        label_map_unknown_cfg,
+                    )
+                    if not mapped:
+                        # Droppé par la policy unknown_labels
+                        continue
+                    label = mapped
+                else:
+                    # Aucun label_map -> on garde le label brut (normalisé) tel quel
+                    # Comportement "historique" : classification directe par crawl/domain/etc.
+                    label = normalize_label_value(label_raw)
 
             if not label:
                 continue
+
 
             label_counts[label] += 1
             docs.append(

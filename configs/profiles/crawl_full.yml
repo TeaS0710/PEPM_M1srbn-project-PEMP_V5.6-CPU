@@ -1,7 +1,7 @@
 # configs/profiles/crawl_full.yml
 
 profile: "crawl_full"
-description: "Classification complète par label de crawl (sklearn + HF + checks)"
+description: "Classification complète par label de crawl (spaCy + sklearn + HF + checks)"
 
 corpus_id: "web1"
 view: "crawl"
@@ -14,21 +14,36 @@ train_prop: 0.8
 min_chars: 200
 max_tokens: 512
 
-tokenizer: "whitespace"
-
-balance_strategy: "alpha_total"
-balance_preset: "default_alpha_total"
+balance_strategy: "none"
+balance_preset: null
 
 families:
   - "check"
+  - "spacy"
   - "sklearn"
   - "hf"
 
-models_spacy: []
+# Modèles spaCy – réutilise la même base que ideo_quick
+models_spacy:
+  - "spacy_cnn_quick"
+  - "spacy_bow_quick"
+
+# Modèles sklearn – même panel complet que ideo_quick
 models_sklearn:
   - "tfidf_svm_quick"
+  - "tfidf_smo_linear"
+  - "tfidf_smo_rbf"
+  - "tfidf_perceptron"
+  - "tfidf_randomtree"
+  - "tfidf_randomforest"
+
+# Modèle HF – comme ideo_full
 models_hf:
   - "camembert_base"
+
+# Pseudo-modèle de check
+models_check:
+  - "check_default"
 
 hardware_preset: "lab"
 

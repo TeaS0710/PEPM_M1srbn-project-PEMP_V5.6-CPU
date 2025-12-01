@@ -1,4 +1,8 @@
 ```bash
+cd data/raw/web1
+ln -s corpus.cleaned.V2.xml corpus.xml
+```
+```bash
 make clean
 ```
 ```bash

@@ -1,32 +1,51 @@
 # configs/profiles/crawl_quick.yml
 
 profile: "crawl_quick"
-description: "Classification rapide par label de crawl (sklearn + checks)"
+description: "Classification rapide par label de crawl (spaCy + sklearn + checks)"
 
 corpus_id: "web1"
 view: "crawl"
 modality: "web"
 
+# On lit directement le <term type="crawl">…</term>
 label_field: "crawl"
-label_map: null   # on peut laisser l'identité pour l'instant
+label_map: null   # identité (pas de mapping)
 
+# Split & filtrage
 train_prop: 0.8
 min_chars: 280
 max_tokens: 512
 
-tokenizer: "whitespace"
-
+# Pas d'équilibrage pour l'instant
 balance_strategy: "none"
 balance_preset: null
 
+# Familles activées (comme ideo_quick, + check)
 families:
   - "check"
+  - "spacy"
   - "sklearn"
 
-models_spacy: []
+# Modèles spaCy – mêmes que ideo_quick
+models_spacy:
+  - "spacy_cnn_quick"
+  - "spacy_bow_quick"
+
+# Modèles sklearn – mêmes que ideo_quick
 models_sklearn:
   - "tfidf_svm_quick"
+  - "tfidf_smo_linear"
+  - "tfidf_smo_rbf"
+  - "tfidf_perceptron"
+  - "tfidf_randomtree"
+  - "tfidf_randomforest"
+
+# Pas de HF en quick
 models_hf: []
+
+# Pseudo-modèle de check
+models_check:
+  - "check_default"
 
 hardware_preset: "small"
 
