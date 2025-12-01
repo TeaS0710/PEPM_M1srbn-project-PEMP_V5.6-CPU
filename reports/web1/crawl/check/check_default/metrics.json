@@ -1,0 +1,20 @@
+{
+  "family": "check",
+  "model_id": "check_default",
+  "n_eval_docs": 10500,
+  "labels": [
+    "crawl_actionfrancaise_20251003_000000",
+    "crawl_cce_full_20250927_234505",
+    "crawl_contretemps_20250928_003525",
+    "crawl_eco_full_20250928_000354",
+    "crawl_er_20251003_231234"
+  ],
+  "label_counts": {
+    "crawl_actionfrancaise_20251003_000000": 1682,
+    "crawl_cce_full_20250927_234505": 13,
+    "crawl_contretemps_20250928_003525": 1541,
+    "crawl_eco_full_20250928_000354": 114,
+    "crawl_er_20251003_231234": 7150
+  },
+  "note": "Famille 'check' = pseudo-modèle, évaluation = stats brutes sur job.tsv"
+}
